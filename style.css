@@ -1123,10 +1123,6 @@ nav {
     }
 }
 
-
-/* What Our Users Say */
-
-
 /* FAQs About QuPDF */
 
 .faq-container {
@@ -1173,11 +1169,16 @@ nav {
 
 .faq-answer {
     display: none;
-    padding-top: 5px;
-    padding-right: 30px;
-    transition: max-height 0.3s ease-in-out;
-    font-size: 16px;
-    color: var(--text-grey);
+    max-height: 0;
+    opacity: 0;
+    overflow: hidden;
+    padding-top: 0;
+    transition: max-height 0.3s ease-out, opacity 0.3s ease-out, padding 0.3s ease-out;
+}
+
+.faq.open .faq-answer {
+    display: block;
+    padding-top: 10px;
 }
 
 /* Mobile (max-width: 480px) */
@@ -1279,7 +1280,6 @@ nav {
         font-size: 16px;
     }
 }
-
 
 /* Try QuPDF Section */
 
@@ -1617,9 +1617,17 @@ footer {
 }
 
 @keyframes notification-bounce {
-    0% { transform: translateY(-20px); }
-    50% { transform: translateY(10px); }
-    100% { transform: translateY(0); }
+    0% {
+        transform: translateY(-20px);
+    }
+
+    50% {
+        transform: translateY(10px);
+    }
+
+    100% {
+        transform: translateY(0);
+    }
 }
 
 .notification-close {

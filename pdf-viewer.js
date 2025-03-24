@@ -880,53 +880,87 @@ async function downloadPdf() {
         // Add download animation
         downloadButton.classList.add('downloading');
         
-        // Load PDF document for modification
-        const pdfBytes = Uint8Array.from(atob(pdfData), c => c.charCodeAt(0));
-        const pdfDoc = await pdfjsLib.getDocument({ data: pdfBytes }).promise;
+        // Convert base64 to Uint8Array more reliably
+        let pdfBytes;
+        try {
+            // First decode base64
+            const binaryString = window.atob(pdfData);
+            // Convert to Uint8Array
+            pdfBytes = new Uint8Array(binaryString.length);
+            for (let i = 0; i < binaryString.length; i++) {
+                pdfBytes[i] = binaryString.charCodeAt(i);
+            }
+        } catch (e) {
+            console.error('Base64 decode error:', e);
+            throw new Error('Failed to decode PDF data');
+        }
+        
+        // Validate PDF bytes
+        if (!pdfBytes || pdfBytes.length === 0) {
+            throw new Error('Invalid PDF data');
+        }
         
         // Create a new PDF document
-        const PDFLib = await import('https://unpkg.com/pdf-lib@1.17.1?module');
+        const PDFLib = await import('https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js');
         const modifiedPdfDoc = await PDFLib.PDFDocument.load(pdfBytes);
         
-        // Apply highlights to each page
-        for (const highlight of highlights) {
-            const page = modifiedPdfDoc.getPage(highlight.pageNumber - 1);
-            
-            // Create highlight annotation
-            page.drawRectangle({
-                x: highlight.position.left,
-                y: page.getHeight() - (highlight.position.top + highlight.position.height),
-                width: highlight.position.width,
-                height: highlight.position.height,
-                color: PDFLib.rgb(1, 0.898, 0.212), // #ffe536 in RGB
-                opacity: 0.4
-            });
+        // Apply highlights to each page if they exist
+        if (highlights && highlights.length > 0) {
+            const pages = modifiedPdfDoc.getPages();
+            for (const highlight of highlights) {
+                if (!highlight.pageNumber || !highlight.position) continue;
+                
+                const pageIndex = highlight.pageNumber - 1;
+                if (pageIndex < 0 || pageIndex >= pages.length) continue;
+                
+                const page = pages[pageIndex];
+                
+                // Create highlight annotation
+                page.drawRectangle({
+                    x: highlight.position.left,
+                    y: page.getHeight() - (highlight.position.top + highlight.position.height),
+                    width: highlight.position.width,
+                    height: highlight.position.height,
+                    color: PDFLib.rgb(1, 0.898, 0.212), // #ffe536 in RGB
+                    opacity: 0.4
+                });
+            }
         }
         
         // Save the modified PDF
         const modifiedPdfBytes = await modifiedPdfDoc.save();
         
-        // Create download link
+        // Create blob and download
         const blob = new Blob([modifiedPdfBytes], { type: 'application/pdf' });
         const url = URL.createObjectURL(blob);
-        const fileName = pdfTitle.textContent || 'document.pdf';
         
+        // Get filename from title or use default
+        const fileName = (pdfTitle?.textContent || 'document')
+            .replace(/[^a-z0-9]/gi, '_') // Replace special chars with underscore
+            .toLowerCase() + '.pdf';
+        
+        // Create and trigger download
         const a = document.createElement('a');
+        a.style.display = 'none';
         a.href = url;
         a.download = fileName;
+        document.body.appendChild(a);
+        
+        // Trigger download
         a.click();
         
-        URL.revokeObjectURL(url);
+        // Clean up
+        setTimeout(() => {
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            downloadButton.classList.remove('downloading');
+            showNotification(`PDF "${fileName}" downloaded successfully!`, 'success');
+        }, 100);
         
-        // Remove download animation
-        downloadButton.classList.remove('downloading');
-        
-        // Show success notification
-        showNotification(`PDF "${fileName}" downloaded successfully with highlights!`, 'success');
     } catch (error) {
         console.error('Error downloading PDF:', error);
         downloadButton.classList.remove('downloading');
-        showNotification('Error downloading PDF with highlights. Please try again.', 'error');
+        showNotification(`Error downloading PDF: ${error.message}. Please try again.`, 'error');
     }
 }
 
@@ -1174,7 +1208,7 @@ function showNotification(message, type = 'info') {
             case 'success':
                 notificationIcon.innerHTML = `
                     <path fill="none" d="M0 0h24v24H0z" />
-                    <path fill="currentColor" d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z" />
+                    <path fill="currentColor" d="M12 22C6.477 22 2 17.523 2 12S6.477 2 12 2s10 4.477 10 10-4.477 10-10 10zm0-2a8 8 0 1 0 0-16 8 8 0 0 0 0 16zm-1-5h2v2h-2v-2zm0-8h2v6h-2V7z" />
                 `;
                 break;
             default:
