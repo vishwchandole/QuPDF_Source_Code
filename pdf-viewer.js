@@ -198,9 +198,21 @@ function autoResizeChatInput() {
     // Reset height to auto to get the correct scrollHeight
     this.style.height = 'auto';
     
-    // Set to scrollHeight to match content (with min and max constraints)
-    const newHeight = Math.min(Math.max(this.scrollHeight, 45), 120);
+    // Get the scrollHeight (actual content height)
+    const scrollHeight = this.scrollHeight;
+    
+    // Calculate new height (with min and max constraints)
+    const newHeight = Math.min(Math.max(scrollHeight, 36), 100);
+    
+    // Apply the new height
     this.style.height = newHeight + 'px';
+    
+    // Show/hide scrollbar based on content
+    if (scrollHeight > 100) {
+        this.style.overflowY = 'auto';
+    } else {
+        this.style.overflowY = 'hidden';
+    }
 }
 
 // Setup resizer for adjusting panel widths
@@ -262,7 +274,174 @@ function addButtonPressEffect(button) {
     });
 }
 
-// Load PDF from data URL or binary data
+// Add this new function after the loadPdfFromData function
+function displayPdfSummary() {
+    // Clear existing chat messages
+    chatMessages.innerHTML = '';
+    
+    // Add welcome message with QuPDF branding
+    const welcomeMessage = document.createElement('div');
+    welcomeMessage.className = 'message system-message welcome-message';
+    welcomeMessage.innerHTML = `
+        <div class="message-content">
+            <div class="welcome-header">
+                <h2>Welcome to <img src="https://res.cloudinary.com/dbkh9rchx/image/upload/v1740990492/QuPDF_n0chy5.svg" alt="QuPDF Logo" class="welcome-logo-text"></h2>
+            </div>
+            <p class="welcome-text">Your intelligent PDF companion is ready to help you explore and understand your document.</p>
+        </div>
+    `;
+    chatMessages.appendChild(welcomeMessage);
+    
+    // Add a divider between welcome message and summary
+    const divider = document.createElement('div');
+    divider.className = 'message-divider';
+    chatMessages.appendChild(divider);
+    
+    // Add system message with dummy summary
+    const systemMessage = document.createElement('div');
+    systemMessage.className = 'message system-message summary-message';
+    systemMessage.innerHTML = `
+        <div class="message-content">
+            <div class="summary-header">
+                <h3>Document Summary</h3>
+            </div>
+            <div class="summary-content">
+                <div class="summary-section">
+                    <h4>Overview</h4>
+                    <p>This is a placeholder summary of your PDF document. In the next phase, this will be replaced with an AI-generated summary using Python backend processing.</p>
+                </div>
+                <div class="summary-section">
+                    <h4>Key Points</h4>
+                    <ul>
+                        <li>Document overview</li>
+                        <li>Main topics covered</li>
+                        <li>Key findings or conclusions</li>
+                        <li>Important statistics or data points</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    `;
+    chatMessages.appendChild(systemMessage);
+    
+    // Add suggested questions as interactive buttons
+    const suggestedQuestions = [
+        {
+            question: "📝 What are the main topics discussed in this document?",
+            description: "Get a high-level overview of the document's key subjects",
+            icon: "📝"
+        },
+        {
+            question: "🔍 Can you find specific information about [topic]?",
+            description: "Search for detailed information on any topic",
+            icon: "🔍"
+        },
+        {
+            question: "📊 What are the important statistics or data points?",
+            description: "Extract numerical data and statistics from the document",
+            icon: "📊"
+        },
+        {
+            question: "💡 Can you explain the main concepts in simpler terms?",
+            description: "Get simplified explanations of complex topics",
+            icon: "💡"
+        },
+        {
+            question: "🎯 What are the key conclusions or recommendations?",
+            description: "Identify the main takeaways and recommendations",
+            icon: "🎯"
+        }
+    ];
+    
+    const questionsContainer = document.createElement('div');
+    questionsContainer.className = 'message';
+    questionsContainer.innerHTML = `
+        <div class="message-content">
+            <div class="summary-section">
+                <h4>Suggested Questions</h4>
+                <p>Click any question below to ask it:</p>
+                <div class="suggested-questions">
+                    ${suggestedQuestions.map(q => `
+                        <div class="suggested-question-item">
+                            <button class="suggested-question-btn">
+                                <div class="question-text">
+                                    <span class="question-icon">${q.icon}</span>
+                                    ${q.question}
+                                </div>
+                                <div class="question-description">${q.description}</div>
+                            </button>
+                        </div>
+                    `).join('')}
+                </div>
+            </div>
+        </div>
+    `;
+    chatMessages.appendChild(questionsContainer);
+    
+    // Add click handlers to suggested questions with enhanced interactivity
+    const questionButtons = questionsContainer.querySelectorAll('.suggested-question-btn');
+    questionButtons.forEach((button, index) => {
+        // Add hover effect
+        button.addEventListener('mouseenter', function() {
+            this.style.transform = 'translateY(-2px)';
+            this.style.boxShadow = '0 8px 16px rgba(119, 108, 255, 0.2)';
+        });
+        
+        button.addEventListener('mouseleave', function() {
+            this.style.transform = 'translateY(0)';
+            this.style.boxShadow = 'none';
+        });
+        
+        // Add click handler with animation
+        button.addEventListener('click', function() {
+            // Add click animation
+            this.style.transform = 'scale(0.98)';
+            setTimeout(() => {
+                this.style.transform = 'scale(1)';
+            }, 100);
+            
+            const question = suggestedQuestions[index].question;
+            
+            // Add user message to chat with animation
+            const userMessage = document.createElement('div');
+            userMessage.className = 'message user-message';
+            userMessage.style.opacity = '0';
+            userMessage.style.transform = 'translateY(20px)';
+            userMessage.innerHTML = `
+                <div class="message-content">
+                    <p>${question}</p>
+                </div>
+            `;
+            chatMessages.appendChild(userMessage);
+            
+            // Animate the message in
+            setTimeout(() => {
+                userMessage.style.transition = 'all 0.3s ease';
+                userMessage.style.opacity = '1';
+                userMessage.style.transform = 'translateY(0)';
+            }, 50);
+            
+            // Clear input
+            chatInput.value = '';
+            chatInput.style.height = 'auto';
+            
+            // Simulate AI response with typing indicator
+            setTimeout(() => {
+                simulateAiResponse(question);
+            }, 500);
+        });
+    });
+    
+    // Add to chat history
+    chatHistory.push({
+        sender: 'system',
+        message: 'Welcome message and PDF Summary displayed',
+        messageType: 'system',
+        timestamp: new Date().toISOString()
+    });
+}
+
+// Modify the loadPdfFromData function to call displayPdfSummary
 function loadPdfFromData(data) {
     try {
         // Clear any existing content
@@ -310,6 +489,9 @@ function loadPdfFromData(data) {
                 if (pdf.numPages > 1) {
                     nextButton.classList.remove('disabled-btn');
                 }
+                
+                // Display PDF summary
+                displayPdfSummary();
                 
                 // Render all pages
                 renderAllPages();
@@ -899,13 +1081,45 @@ async function downloadPdf() {
         if (!pdfBytes || pdfBytes.length === 0) {
             throw new Error('Invalid PDF data');
         }
+
+        // If there are no highlights, download the original PDF directly
+        if (!highlights || highlights.length === 0) {
+            // Create blob and download
+            const blob = new Blob([pdfBytes], { type: 'application/pdf' });
+            const url = URL.createObjectURL(blob);
+            
+            // Get filename from title or use default
+            const fileName = (pdfTitle?.textContent || 'document')
+                .replace(/[^a-z0-9]/gi, '_') // Replace special chars with underscore
+                .toLowerCase() + '.pdf';
+            
+            // Create and trigger download
+            const a = document.createElement('a');
+            a.style.display = 'none';
+            a.href = url;
+            a.download = fileName;
+            document.body.appendChild(a);
+            
+            // Trigger download
+            a.click();
+            
+            // Clean up
+            setTimeout(() => {
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+                downloadButton.classList.remove('downloading');
+                showNotification(`PDF "${fileName}" downloaded successfully!`, 'success');
+            }, 100);
+            return;
+        }
         
-        // Create a new PDF document
-        const PDFLib = await import('https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js');
-        const modifiedPdfDoc = await PDFLib.PDFDocument.load(pdfBytes);
-        
-        // Apply highlights to each page if they exist
-        if (highlights && highlights.length > 0) {
+        // If there are highlights, use pdf-lib to add them
+        try {
+            // Create a new PDF document
+            const PDFLib = await import('https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js');
+            const modifiedPdfDoc = await PDFLib.PDFDocument.load(pdfBytes);
+            
+            // Apply highlights to each page if they exist
             const pages = modifiedPdfDoc.getPages();
             for (const highlight of highlights) {
                 if (!highlight.pageNumber || !highlight.position) continue;
@@ -925,37 +1139,61 @@ async function downloadPdf() {
                     opacity: 0.4
                 });
             }
+            
+            // Save the modified PDF
+            const modifiedPdfBytes = await modifiedPdfDoc.save();
+            
+            // Create blob and download
+            const blob = new Blob([modifiedPdfBytes], { type: 'application/pdf' });
+            const url = URL.createObjectURL(blob);
+            
+            // Get filename from title or use default
+            const fileName = (pdfTitle?.textContent || 'document')
+                .replace(/[^a-z0-9]/gi, '_') // Replace special chars with underscore
+                .toLowerCase() + '_with_highlights.pdf';
+            
+            // Create and trigger download
+            const a = document.createElement('a');
+            a.style.display = 'none';
+            a.href = url;
+            a.download = fileName;
+            document.body.appendChild(a);
+            
+            // Trigger download
+            a.click();
+            
+            // Clean up
+            setTimeout(() => {
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+                downloadButton.classList.remove('downloading');
+                showNotification(`PDF "${fileName}" downloaded successfully!`, 'success');
+            }, 100);
+            
+        } catch (error) {
+            console.error('Error modifying PDF with highlights:', error);
+            // If pdf-lib fails, fall back to downloading original PDF
+            const blob = new Blob([pdfBytes], { type: 'application/pdf' });
+            const url = URL.createObjectURL(blob);
+            
+            const fileName = (pdfTitle?.textContent || 'document')
+                .replace(/[^a-z0-9]/gi, '_')
+                .toLowerCase() + '.pdf';
+            
+            const a = document.createElement('a');
+            a.style.display = 'none';
+            a.href = url;
+            a.download = fileName;
+            document.body.appendChild(a);
+            a.click();
+            
+            setTimeout(() => {
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+                downloadButton.classList.remove('downloading');
+                showNotification(`Original PDF "${fileName}" downloaded successfully!`, 'success');
+            }, 100);
         }
-        
-        // Save the modified PDF
-        const modifiedPdfBytes = await modifiedPdfDoc.save();
-        
-        // Create blob and download
-        const blob = new Blob([modifiedPdfBytes], { type: 'application/pdf' });
-        const url = URL.createObjectURL(blob);
-        
-        // Get filename from title or use default
-        const fileName = (pdfTitle?.textContent || 'document')
-            .replace(/[^a-z0-9]/gi, '_') // Replace special chars with underscore
-            .toLowerCase() + '.pdf';
-        
-        // Create and trigger download
-        const a = document.createElement('a');
-        a.style.display = 'none';
-        a.href = url;
-        a.download = fileName;
-        document.body.appendChild(a);
-        
-        // Trigger download
-        a.click();
-        
-        // Clean up
-        setTimeout(() => {
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
-            downloadButton.classList.remove('downloading');
-            showNotification(`PDF "${fileName}" downloaded successfully!`, 'success');
-        }, 100);
         
     } catch (error) {
         console.error('Error downloading PDF:', error);
@@ -977,12 +1215,6 @@ function shareChat() {
     // In a real app, you'd implement sharing functionality
     // For this demo, we'll just show a notification
     showNotification('Chat sharing functionality would be implemented here.', 'info');
-    
-    // You could implement:
-    // 1. Copy to clipboard
-    // 2. Generate a shareable link
-    // 3. Email the chat
-    // 4. Export to social media
 }
 
 // Export chat functionality
@@ -1029,8 +1261,7 @@ function clearChat() {
     // Add system message
     const systemMessage = document.createElement('div');
     systemMessage.className = 'message system-message';
-    systemMessage.innerHTML = `
-        <div class="message-content">
+    systemMessage.innerHTML = `        <div class="message-content">
             <p>Chat has been cleared. Ask me anything about your PDF document.</p>
         </div>
     `;

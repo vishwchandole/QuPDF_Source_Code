@@ -357,35 +357,110 @@ document.addEventListener("DOMContentLoaded", function () {
         return true;
     }
 
+    // Process URL and fetch PDF
+    async function processUrl(url) {
+        try {
+            showLoader(true);
+
+            // For Google Drive URLs, modify the URL to get direct download link
+            let processedUrl = url;
+            if (url.includes('drive.google.com')) {
+                const fileId = url.match(/[-\w]{25,}/);
+                if (fileId) {
+                    processedUrl = `https://drive.google.com/uc?export=download&id=${fileId[0]}`;
+                }
+            }
+
+            const response = await fetch(processedUrl);
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
+            // Check if the response is a PDF
+            const contentType = response.headers.get('content-type');
+            if (!contentType || !contentType.includes('pdf')) {
+                throw new Error('The URL does not point to a valid PDF file');
+            }
+
+            const arrayBuffer = await response.arrayBuffer();
+            
+            // Convert arraybuffer to base64
+            const base64 = btoa(
+                new Uint8Array(arrayBuffer)
+                    .reduce((data, byte) => data + String.fromCharCode(byte), '')
+            );
+
+            // Get filename from URL or use default
+            const fileName = url.split('/').pop()?.split('?')[0] || 'Document from URL.pdf';
+
+            // Store data in sessionStorage
+            sessionStorage.setItem('pdfData', base64);
+            sessionStorage.setItem('pdfName', fileName);
+
+            // Clear the input and hide the URL input container
+            if (urlInput) {
+                urlInput.value = '';
+            }
+            if (urlInputContainer) {
+                urlInputContainer.style.display = 'none';
+            }
+
+            // Hide loader and redirect
+            showLoader(false);
+            window.location.href = 'pdf-viewer.html';
+
+        } catch (error) {
+            console.error('Error fetching PDF:', error);
+            const errorInfo = getErrorTypeAndMessage('upload_failed');
+            showError(errorInfo.message, errorInfo.type);
+            showLoader(false);
+        }
+    }
+
     // Process the PDF file and redirect to viewer
     async function processPdfFile(file) {
         try {
+            showLoader(true);
+
+            // Validate file type
+            if (!file.type.includes('pdf')) {
+                throw new Error('Please upload a PDF file');
+            }
+
+            // Validate file size (max 10MB)
+            if (file.size > 10 * 1024 * 1024) {
+                throw new Error('File size should be less than 10MB');
+            }
+
             // Read the file as base64
             const reader = new FileReader();
-
-            reader.onload = function (e) {
+            
+            reader.onload = function(e) {
                 // Get base64 data (remove the data URL prefix)
                 const base64Data = e.target.result.split(',')[1];
-
+                
                 // Store in sessionStorage
                 sessionStorage.setItem('pdfData', base64Data);
                 sessionStorage.setItem('pdfName', file.name);
-
+                
                 // Redirect to PDF viewer page
                 window.location.href = 'pdf-viewer.html';
             };
 
-            reader.onerror = function () {
-                const error = getErrorTypeAndMessage('processing_error');
-                showError(error.message, error.type);
+            reader.onerror = function() {
+                showError('Failed to read PDF file. Please try again.');
+                showLoader(false);
             };
 
             // Read as data URL
             reader.readAsDataURL(file);
+            
+            return true;
         } catch (error) {
-            console.error("Error processing PDF:", error);
-            const errorInfo = getErrorTypeAndMessage('processing_error');
-            showError(errorInfo.message, errorInfo.type);
+            console.error('Error processing PDF:', error);
+            showError(error.message || 'Failed to process PDF. Please try again.');
+            showLoader(false);
+            return false;
         }
     }
 
@@ -478,58 +553,8 @@ document.addEventListener("DOMContentLoaded", function () {
 
     sendUrlButton?.addEventListener("click", function () {
         const url = urlInput?.value.trim();
-
         if (validateURL(url)) {
-            showLoader(true);
-
-            // For Google Drive URLs, modify the URL to get direct download link
-            let processedUrl = url;
-            if (url.includes('drive.google.com')) {
-                const fileId = url.match(/[-\w]{25,}/);
-                if (fileId) {
-                    processedUrl = `https://drive.google.com/uc?export=download&id=${fileId[0]}`;
-                }
-            }
-
-            fetch(processedUrl)
-                .then(response => {
-                    if (!response.ok) {
-                        throw new Error(`HTTP error! status: ${response.status}`);
-                    }
-                    return response.arrayBuffer();
-                })
-                .then(arrayBuffer => {
-                    // Convert arraybuffer to base64
-                    const base64 = btoa(
-                        new Uint8Array(arrayBuffer)
-                            .reduce((data, byte) => data + String.fromCharCode(byte), '')
-                    );
-
-                    // Get filename from URL or use default
-                    const fileName = url.split('/').pop()?.split('?')[0] || 'Document from URL.pdf';
-
-                    // Store data in sessionStorage
-                    sessionStorage.setItem('pdfData', base64);
-                    sessionStorage.setItem('pdfName', fileName);
-
-                    // Clear the input and hide the URL input container
-                    if (urlInput) {
-                        urlInput.value = '';
-                    }
-                    if (urlInputContainer) {
-                        urlInputContainer.style.display = 'none';
-                    }
-
-                    // Hide loader and redirect
-                    showLoader(false);
-                    window.location.href = 'pdf-viewer.html';
-                })
-                .catch(error => {
-                    console.error('Error fetching PDF:', error);
-                    const errorInfo = getErrorTypeAndMessage('upload_failed');
-                    showError(errorInfo.message, errorInfo.type);
-                    showLoader(false);
-                });
+            processUrl(url);
         }
     });
 
@@ -591,7 +616,10 @@ document.addEventListener("DOMContentLoaded", function () {
         urlInput?.addEventListener("keypress", function(event) {
             if (event.key === "Enter") {
                 event.preventDefault();
-                sendUrlButton?.click();
+                const url = urlInput.value.trim();
+                if (validateURL(url)) {
+                    processUrl(url);
+                }
             }
         });
 
@@ -602,3 +630,51 @@ document.addEventListener("DOMContentLoaded", function () {
         });
     }
 });
+
+// Add chat functionality
+document.addEventListener('DOMContentLoaded', function() {
+    const chatInput = document.querySelector('.chat-input');
+    const sendButton = document.querySelector('.send-button');
+    const chatMessages = document.querySelector('.chat-messages');
+
+    if (chatInput && sendButton && chatMessages) {
+        sendButton.addEventListener('click', sendMessage);
+        chatInput.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                sendMessage();
+            }
+        });
+    }
+});
+
+async function sendMessage() {
+    const chatInput = document.querySelector('.chat-input');
+    const message = chatInput.value.trim();
+    
+    if (!message) {
+        return;
+    }
+
+    // Add user message to chat
+    addMessageToChat('user', message);
+    chatInput.value = '';
+
+    try {
+        // For now, we'll just echo back a simple response
+        // This can be enhanced later with actual AI processing
+        const response = "I understand your question. However, the AI processing feature is currently unavailable. Please try again later.";
+        addMessageToChat('assistant', response);
+    } catch (error) {
+        console.error('Error processing message:', error);
+        addMessageToChat('assistant', 'Sorry, I encountered an error. Please try again later.');
+    }
+}
+
+function addMessageToChat(sender, message) {
+    const chatMessages = document.querySelector('.chat-messages');
+    const messageDiv = document.createElement('div');
+    messageDiv.className = `chat-message ${sender}-message`;
+    messageDiv.textContent = message;
+    chatMessages.appendChild(messageDiv);
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+}
