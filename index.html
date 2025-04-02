@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QuPDF AI | Chat with any PDF for free</title>
+    <link rel="icon" type="image/x-icon"
+        href="https://res.cloudinary.com/dbkh9rchx/image/upload/v1740990492/favicon_fregh4.ico">
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+
+    <!-- Notification Component -->
+    <div id="notification" class="notification">
+        <div class="notification-content">
+            <div class="notification-icon-message">
+                <svg class="notification-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24"
+                    height="24">
+                    <path fill="none" d="M0 0h24v24H0z" />
+                    <path fill="currentColor"
+                        d="M12 22C6.477 22 2 17.523 2 12S6.477 2 12 2s10 4.477 10 10-4.477 10-10 10zm0-2a8 8 0 1 0 0-16 8 8 0 0 0 0 16zm-1-5h2v2h-2v-2zm0-8h2v6h-2V7z" />
+                </svg>
+                <span id="notification-message">Error message goes here</span>
+            </div>
+            <button id="notification-close" class="notification-close">&times;</button>
+        </div>
+    </div>
+
+    <!-- Navbar -->
+    <main id="home-section">
+        <nav>
+            <div class="logo">
+                <a href="index.html"><img
+                        src="assests/QuPDF.svg"
+                        alt="QuPDF Logo"></a>
+            </div>
+            <div class="menu-toggle" onclick="toggleMenu()">☰</div>
+            <div class="nav-links">
+                <a href="#home">Home</a>
+                <a href="#about">About</a>
+                <a href="#features">Features</a>
+                <a href="#docs">Docs</a>
+                <a href="#contact">Contact</a>
+            </div>
+            <div class="nav-actions">
+                <button class="btn btn-get-started" id="btn-get-started">Get Started</button>
+            </div>
+        </nav>
+    </main>
+
+
+    <!-- Heading and File Upload -->
+    <section class="home-container" id="heroSection">
+        <div class="main-headline">
+            <h1 class="main-heading1">Say Hello to the Future of PDFs</h1>
+            <h1 class="main-heading2">Chat, Summarize, Discover with <span class="main-highlight">QuPDF!</span></h1>
+        </div>
+        <div class="main-sub-text">
+            <p>Chat with your documents, summarize complex content, and uncover key insights in seconds. Experience
+                the
+                future of PDFs, smarter and more engaging than ever!</p>
+        </div>
+
+        <div class="file-upload-container" id="fileDropZone">
+            <div class="upload-background"></div> <!-- Background container -->
+            <div class="upload-box">
+                <img src="https://res.cloudinary.com/dbkh9rchx/image/upload/v1740847496/pdf_uaedao.svg" alt="PDF Icon"
+                    class="pdf-icon">
+                <p class="upload-text"><strong>Click or drag file to this page to upload</strong></p>
+                <p class="file-formats">Formats: PDF supported only</p>
+                <button class="upload-btn"><img
+                        src="https://res.cloudinary.com/dbkh9rchx/image/upload/v1740847498/upload_lu0r1n.svg"
+                        alt="">Upload PDF</button>
+                <p class="from-url">
+                    <img src="https://res.cloudinary.com/dbkh9rchx/image/upload/v1740847488/pdf_link_ylojqs.svg"
+                        alt="URL">
+                    From URL
+                </p>
+                <div id="urlInputContainer" class="url-input-container" style="display: none;">
+                    <input type="text" id="pdfUrl" placeholder="https://example.com/file.pdf">
+                    <button id="sendUrl">
+                        <img src="https://res.cloudinary.com/dbkh9rchx/image/upload/v1741249269/send_ilztp9.svg"
+                            alt="Send">
+                    </button>
+                </div>
+                <p id="uploadedFileName" class="file-name-display"></p>
+                <div id="customError" class="error-message"></div>
+                <div id="loader" class="spinner center" style="display: none;">
+                    <div class="spinner-blade"></div>
+                    <div class="spinner-blade"></div>
+                    <div class="spinner-blade"></div>
+                    <div class="spinner-blade"></div>
+                    <div class="spinner-blade"></div>
+                    <div class="spinner-blade"></div>
+                    <div class="spinner-blade"></div>
+                    <div class="spinner-blade"></div>
+                    <div class="spinner-blade"></div>
+                    <div class="spinner-blade"></div>
+                    <div class="spinner-blade"></div>
+                    <div class="spinner-blade"></div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+
+    <!-- How to chat with QuPDF -->
+    <section class="use">
+        <div class="use-container-heading">
+            <h2 class="sub-heading">How to chat with <span class="sub-highlight">QuPDF</span></h2>
+            <p class="sub-subtext">Effortless PDF Interaction: Upload, Chat, Summarize, and Explore in Seconds!</p>
+        </div>
+        <div class="use-container">
+            <div class="use-1">
+                <img src="https://res.cloudinary.com/dbkh9rchx/image/upload/v1740847498/upload-icon_qph6se.svg"
+                    alt="Upload Your PDF" class="icon1, icon">
+                <h3 class="title">Upload Your PDF</h3>
+                <p class="title-text">Drag and drop your PDF or click to upload. QuPDF processes it instantly, making
+                    it ready for interaction.</p>
+            </div>
+            <div class="use-2">
+                <img src="https://res.cloudinary.com/dbkh9rchx/image/upload/v1740847476/chat_rmkb67.svg"
+                    alt="Ask Questions" class="icon2, icon">
+                <h3 class="title">Ask Questions</h3>
+                <p class="title-text">Get instant summaries, ask anything, and receive precise AI answers with relevant
+                    real-time citations effortlessly.</p>
+            </div>
+            <div class="use-3">
+                <img src="https://res.cloudinary.com/dbkh9rchx/image/upload/v1740847480/learn_fmoxzz.svg"
+                    alt="Explore and Learn" class="icon3, icon">
+                <h3 class="title">Explore and Learn</h3>
+                <p class="title-text">Explore deeper insights, follow up, translate, and extract key information
+                    seamlessly in any language.</p>
+            </div>
+        </div>
+    </section>
+
+
+    <!-- Start for free button -->
+    <button id="startBtn" class="startBtn">Start for free →</button>
+
+
+    <!-- Features -->
+    <section class="feature">
+        <div class="feature-container-heading">
+            <h2 class="sub-heading">QuPDF in a <span class="sub-highlight">Nutshell</span></h2>
+            <p class="sub-subtext">QuPDF – Your AI-powered PDF assistant. Summarize, ask questions, and get instant
+                answers for free.</p>
+        </div>
+
+        <div class="feature-grid">
+            <div class="feature-card">
+                <img src="https://res.cloudinary.com/dbkh9rchx/image/upload/v1740847477/research_cza2lj.svg"
+                    alt="For Researchers">
+                <h3 class="title">For Researchers</h3>
+                <p class="title-text">Explore scientific papers, academic articles, and books. Get summaries, key
+                    insights,
+                    and citations in seconds.</p>
+            </div>
+            <div class="feature-card">
+                <img src="https://res.cloudinary.com/dbkh9rchx/image/upload/v1740847485/student_pt3u1m.svg"
+                    alt="For Students">
+                <h3 class="title">For Students</h3>
+                <p class="title-text">Study smarter. Summarize notes, get homework help, and answer multiple-choice
+                    questions faster to stay ahead.</p>
+            </div>
+            <div class="feature-card">
+                <img src="https://res.cloudinary.com/dbkh9rchx/image/upload/v1740847494/professionals_vrampa.svg"
+                    alt="For Professionals">
+                <h3 class="title">For Professionals</h3>
+                <p class="title-text">Navigate contracts, reports, and manuals extract key details, ask questions, and
+                    get instant answers from PDFs.</p>
+            </div>
+            <div class="feature-card">
+                <img src="https://res.cloudinary.com/dbkh9rchx/image/upload/v1740847478/easyuse_ybilbj.svg"
+                    alt="Easy to Use">
+                <h3 class="title">Easy to Use</h3>
+                <p class="title-text">No technical skills needed. Upload your PDF, start chatting, and get instant,
+                    user-friendly responses.</p>
+            </div>
+            <div class="feature-card">
+                <img src="https://res.cloudinary.com/dbkh9rchx/image/upload/v1740847493/secure_bzyncn.svg"
+                    alt="Secure & Private">
+                <h3 class="title">Secure & Private</h3>
+                <p class="title-text">Your data stays private. QuPDF securely processes files without storing, tracking,
+                    or sharing them.</p>
+            </div>
+            <div class="feature-card">
+                <img src="https://res.cloudinary.com/dbkh9rchx/image/upload/v1740847478/search_da1ri1.svg"
+                    alt="Smart Search & Insights" class="search-icon">
+                <h3 class="title">Smart Search & Insights</h3>
+                <p class="title-text">Find what matters. Search documents, ask follow-ups, and get instant AI-powered
+                    explanations.</p>
+            </div>
+            <div class="feature-card">
+                <img src="https://res.cloudinary.com/dbkh9rchx/image/upload/v1740847482/interface_v83sif.svg"
+                    alt="User-Friendly Interface">
+                <h3 class="title">User-Friendly Interface</h3>
+                <p class="title-text">No learning curve. Upload your PDF and start interacting instantly with a
+                    hassle-free experience.</p>
+            </div>
+            <div class="feature-card">
+                <img src="https://res.cloudinary.com/dbkh9rchx/image/upload/v1740847509/learning_yh3tbb.svg"
+                    alt="Interactive Learning">
+                <h3 class="title">Interactive Learning</h3>
+                <p class="title-text">Engage with PDFs. Ask follow-ups, explore key concepts, and deepen your
+                    understanding effortlessly.</p>
+            </div>
+        </div>
+    </section>
+
+
+    <!-- FAQs About QuPDF -->
+    <section class="faq-container">
+        <div class="faq-section-heading">
+            <h2 class="sub-heading">FAQs About <span class="sub-highlight">QuPDF</span></h2>
+            <br>
+        </div>
+        <div class="faq" onclick="toggleFAQ(this)">
+            <div class="faq-header">
+                <span>What is QuPDF, and how does it work?</span>
+                <span class="faq-icon">+</span>
+            </div>
+            <div class="faq-answer">QuPDF is an AI-powered tool that allows you to upload PDFs and interact with them.
+                You can ask questions, get summaries,
+                and extract key information without manually searching through the document.</div>
+        </div>
+        <div class="faq" onclick="toggleFAQ(this)">
+            <div class="faq-header">
+                <span>Is QuPDF free to use?</span>
+                <span class="faq-icon">+</span>
+            </div>
+            <div class="faq-answer">Yes, QuPDF offers a free version with essential features. However, there may be
+                limitations on file size, the number of
+                queries, or response depth. A premium version with extended capabilities may be available.
+            </div>
+        </div>
+        <div class="faq" onclick="toggleFAQ(this)">
+            <div class="faq-header">
+                <span>Do I need to sign in to use QuPDF?</span>
+                <span class="faq-icon">+</span>
+            </div>
+            <div class="faq-answer">No, you can use QuPDF without signing in. However, creating an account may unlock
+                additional benefits like saving
+                documents, accessing more queries, and using advanced features.</div>
+        </div>
+        <div class="faq" onclick="toggleFAQ(this)">
+            <div class="faq-header">
+                <span>Is QuPDF interactive?</span>
+                <span class="faq-icon">+</span>
+            </div>
+            <div class="faq-answer">Yes, QuPDF provides an interactive chat feature where you can ask questions about
+                your PDF and get instant answers,
+                making it easier to extract relevant information.
+            </div>
+        </div>
+        <div class="faq" onclick="toggleFAQ(this)">
+            <div class="faq-header">
+                <span>Can I use QuPDF on mobile devices?</span>
+                <span class="faq-icon">+</span>
+            </div>
+            <div class="faq-answer">Yes, QuPDF is web-based and works smoothly on desktops, tablets, and mobile browsers
+                without requiring any app
+                installation.</div>
+        </div>
+        <div class="faq" onclick="toggleFAQ(this)">
+            <div class="faq-header">
+                <span>How secure is QuPDF?</span>
+                <span class="faq-icon">+</span>
+            </div>
+            <div class="faq-answer">Security is a priority for QuPDF. Uploaded files are processed securely and
+                automatically deleted after a session. No
+                user data is stored, shared, or analyzed for external use.</div>
+        </div>
+    </section>
+
+
+    <!-- Try for free -->
+    <section class="qupdf-start-section">
+        <h2>Try QuPDF for Free</h2>
+        <p>AI-Powered Interactive PDF Assistant for Summarization and Chat</p>
+        <button id="startForFreeBtn" class="start-free-btn">Start for free →</button>
+    </section>
+
+
+    <!-- Footer -->
+    <footer>
+        <div class="footer-container">
+            <img src="assests/QuPDF.svg" alt="QuPDF Logo"
+                class="footer-logo">
+            <ul class="footer-links">
+                <li><a href="index.html">Home</a></li>
+                <li><a href="#about">About Us</a></li>
+                <li><a href="#features">Features</a></li>
+                <li><a href="#policy">Privacy Policy</a></li>
+                <li><a href="#contact">Contact</a></li>
+            </ul>
+            <p class="stay-in-touch">Stay in touch</p>
+            <div class="social-icons">
+                <a href="#"><img src="https://res.cloudinary.com/dbkh9rchx/image/upload/v1740990491/facebook_gu1gcv.svg"
+                        alt="Facebook"></a>
+                <a href="#"><img src="https://res.cloudinary.com/dbkh9rchx/image/upload/v1740990493/x_cxqb0u.svg"
+                        alt="X"></a>
+                <a href="#"><img
+                        src="https://res.cloudinary.com/dbkh9rchx/image/upload/v1740990492/instagram_hsmoyn.svg"
+                        alt="Instagram"></a>
+                <a href="#"><img src="https://res.cloudinary.com/dbkh9rchx/image/upload/v1740990492/linkedin_wgxjvh.svg"
+                        alt="LinkedIn"></a>
+            </div>
+            <p class="copyright">&copy; 2025 QuPDF. All Rights Reserved.</p>
+        </div>
+    </footer>
+
+    <script src="script.js"></script>
+
+</body>
+
+</html>

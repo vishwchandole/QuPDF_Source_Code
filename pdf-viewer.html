@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QuPDF - PDF Viewer & Chat</title>
+    <link rel="icon" type="image/x-icon" href="https://res.cloudinary.com/dbkh9rchx/image/upload/v1740990492/favicon_fregh4.ico">
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="pdf-viewer.css">
+    <!-- PDF.js library -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js" defer></script>
+    <script>
+        // Set worker source path for PDF.js
+        document.addEventListener('DOMContentLoaded', function() {
+            if (typeof pdfjsLib !== 'undefined') {
+                pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js';
+                console.log('PDF.js loaded successfully');
+            } else {
+                console.error('PDF.js library failed to load');
+                // Try to load from alternative CDN
+                const script = document.createElement('script');
+                script.src = 'https://mozilla.github.io/pdf.js/build/pdf.min.js';
+                script.onload = function() {
+                    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://mozilla.github.io/pdf.js/build/pdf.worker.min.js';
+                    console.log('PDF.js loaded from alternative source');
+                };
+                document.head.appendChild(script);
+            }
+        });
+    </script>
+</head>
+
+<body>
+    <!-- Notification Component -->
+    <div id="notification" class="notification">
+        <div class="notification-content">
+            <div class="notification-icon-message">
+                <svg class="notification-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24"></svg>
+                <span id="notification-message"></span>
+            </div>
+            <button id="notification-close" class="notification-close">&times;</button>
+        </div>
+    </div>
+
+    <!-- Navbar -->
+    <nav class="pdf-viewer-nav">
+        <div class="logo">
+            <a href="index.html"><img src="assests/QuPDF.svg" alt="QuPDF Logo"></a>
+        </div>
+        <div class="pdf-info">
+            <h1 id="pdf-title">PDF Document</h1>
+        </div>
+        <div class="nav-actions">
+            <button id="back-to-home" class="btn">Back to Home</button>
+        </div>
+    </nav>
+
+    <!-- Main Content Area -->
+    <div class="pdf-chat-container">
+        <!-- PDF Viewer Section -->
+        <div class="pdf-viewer-section">
+            <div class="pdf-toolbar">
+                <div class="pdf-controls">
+                    <button id="prev-page" class="pdf-control-btn" data-tooltip="Previous Page">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24">
+                            <path fill="none" d="M0 0h24v24H0z"/>
+                            <path fill="currentColor" d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/>
+                        </svg>
+                    </button>
+                    <div class="page-info">
+                        <span>Page <span id="current-page">1</span> of <span id="total-pages">1</span></span>
+                    </div>
+                    <button id="next-page" class="pdf-control-btn" data-tooltip="Next Page">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24">
+                            <path fill="none" d="M0 0h24v24H0z"/>
+                            <path fill="currentColor" d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/>
+                        </svg>
+                    </button>
+                </div>
+                <div class="pdf-zoom-controls">
+                    <button id="zoom-out" class="pdf-control-btn" data-tooltip="Zoom Out">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24">
+                            <path fill="none" d="M0 0h24v24H0z"/>
+                            <path fill="currentColor" d="M19 13h-8v-2h8v2z"/>
+                        </svg>
+                    </button>
+                    <span id="zoom-level">100%</span>
+                    <button id="zoom-in" class="pdf-control-btn" data-tooltip="Zoom In">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24">
+                            <path fill="none" d="M0 0h24v24H0z"/>
+                            <path fill="currentColor" d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
+                        </svg>
+                    </button>
+                    <button id="reset-zoom" class="pdf-control-btn" data-tooltip="Reset Zoom">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24">
+                            <path fill="none" d="M0 0h24v24H0z"/>
+                            <path fill="currentColor" d="M9 9V3H7v2.59L3.91 2.5 2.5 3.91 5.59 7H3v2h6zm12 0V7h-2.59l3.09-3.09-1.41-1.41L17 5.59V3h-2v6h6zM3 15v2h2.59L2.5 20.09l1.41 1.41L7 18.41V21h2v-6H3zm12 0v6h2v-2.59l3.09 3.09 1.41-1.41L18.41 17H21v-2h-6z"/>
+                        </svg>
+                    </button>
+                </div>
+                <div class="pdf-search">
+                    <input type="text" id="search-input" placeholder="Search in document...">
+                    <button id="search-btn" class="pdf-control-btn" data-tooltip="Search">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24">
+                            <path fill="none" d="M0 0h24v24H0z"/>
+                            <path fill="currentColor" d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/>
+                        </svg>
+                    </button>
+                </div>
+                <div class="pdf-actions">
+                    <button id="highlight-btn" class="pdf-control-btn" data-tooltip="Highlight Text">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24">
+                            <path fill="none" d="M0 0h24v24H0z"/>
+                            <path fill="currentColor" d="M20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83zM3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25z"/>
+                        </svg>
+                    </button>
+                    <button id="download-btn" class="pdf-control-btn" data-tooltip="Download PDF">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24">
+                            <path fill="none" d="M0 0h24v24H0z"/>
+                            <path fill="currentColor" d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+            <div class="pdf-container">
+                <canvas id="pdf-canvas"></canvas>
+            </div>
+        </div>
+
+        <!-- Chat Interface Section -->
+        <div class="chat-section">
+            <div class="chat-toolbar">
+                <h2>Chat</h2>
+                <div class="chat-toolbar-actions">
+                    <button id="share-chat" class="chat-action-btn" data-tooltip="Share Chat">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24">
+                            <path fill="none" d="M0 0h24v24H0z"/>
+                            <path fill="currentColor" d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.81 2.04.81 1.66 0 3-1.34 3-3s-1.34-3-3-3-3 1.34-3 3c0 .24.04.47.09.7L8.04 9.81C7.5 9.31 6.79 9 6 9c-1.66 0-3 1.34-3 3s1.34 3 3 3c.79 0 1.5-.31 2.04-.81l7.12 4.16c-.05.21-.08.43-.08.65 0 1.61 1.31 2.92 2.92 2.92 1.61 0 2.92-1.31 2.92-2.92s-1.31-2.92-2.92-2.92z"/>
+                        </svg>
+                    </button>
+                    <button id="export-chat" class="chat-action-btn" data-tooltip="Export Chat">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24">
+                            <path fill="none" d="M0 0h24v24H0z"/>
+                            <path fill="currentColor" d="M19 12v7H5v-7H3v7c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2v-7h-2zm-6 .67l2.59-2.58L17 11.5l-5 5-5-5 1.41-1.41L11 12.67V3h2v9.67z"/>
+                        </svg>
+                    </button>
+                    <button id="delete-chat" class="chat-action-btn" data-tooltip="Clear Chat">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24">
+                            <path fill="none" d="M0 0h24v24H0z"/>
+                            <path fill="currentColor" d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+            <div class="chat-messages" id="chat-messages">
+                <div class="message system-message">
+                    <div class="message-content">
+                        <p>Hello! I'm your AI assistant. Ask me anything about your PDF document.</p>
+                    </div>
+                </div>
+                <!-- PDF Summary Section -->
+                <div class="pdf-summary-section">
+                    <h3>Document Summary</h3>
+                    <div class="pdf-summary">
+                        <!-- Summary will be inserted here -->
+                    </div>
+                </div>
+                
+                Suggested Questions Section
+                <div class="suggested-questions-section">
+                    <h3>Suggested Questions</h3>
+                    <div class="suggested-questions">
+                        <!-- Questions will be inserted here -->
+                    </div>
+                </div>
+                <!-- Messages will be added here dynamically -->
+            </div>
+            
+            <div class="chat-input-container">
+                <textarea id="chat-input" placeholder="Ask a question about your document..."></textarea>
+                <button id="send-message" class="send-btn">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24">
+                        <path fill="none" d="M0 0h24v24H0z"/>
+                        <path fill="currentColor" d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
+                    </svg>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Load scripts in the correct order -->
+    <script src="backend-integration.js"></script>
+    <script src="pdf-viewer.js"></script>
+</body>
+
+</html> 

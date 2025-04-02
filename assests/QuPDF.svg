@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="220" height="55" viewBox="0 0 220 55">
+  <defs>
+    <style>
+      .cls-1 {
+        fill: none;
+        stroke: #776cff;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+        stroke-width: 5.292px;
+        fill-rule: evenodd;
+      }
+
+      .cls-2 {
+        fill: #776cff;
+      }
+
+      .cls-3 {
+        font-size: 35.929px;
+        text-anchor: middle;
+        font-family: "Wargo DEMO";
+      }
+    </style>
+  </defs>
+  <path class="cls-1" d="M21.969,8.969h8.063a15,15,0,0,1,15,15V47.031H21.969a15,15,0,0,1-15-15V23.969A15,15,0,0,1,21.969,8.969Z"/>
+  <path id="Rectangle_1_copy" data-name="Rectangle 1 copy" class="cls-1" d="M23.419,19.419h5.163a6,6,0,0,1,6,6v5.163a6,6,0,0,1-6,6H23.419a6,6,0,0,1-6-6V25.419A6,6,0,0,1,23.419,19.419Z"/>
+  <rect class="cls-2" x="28" y="34.063" width="19" height="5.156"/>
+  <text id="QuPDF" class="cls-3" transform="translate(119.039 42.114) scale(1.429 1.399)"><tspan x="0">QuPDF</tspan></text>
+  <rect x="115" y="24" width="2.781" height="13"/>
+  <rect id="Rectangle_3_copy" data-name="Rectangle 3 copy" x="166" y="24" width="3" height="13"/>
+</svg>
