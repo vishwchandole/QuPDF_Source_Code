@@ -114,6 +114,20 @@ function setupEventListeners() {
         }
     });
     
+    // Adjust search input width based on content
+    searchInput.addEventListener('input', function() {
+        if (this.value.trim() === '') {
+            clearSearchHighlights();
+            // Reset to default width
+            document.querySelector('.pdf-search').style.maxWidth = '220px';
+        } else {
+            // Adjust width based on content length (20px per character with a min of 220px and max of 320px)
+            const textLength = this.value.length;
+            const newWidth = Math.max(220, Math.min(320, 220 + (textLength * 8)));
+            document.querySelector('.pdf-search').style.maxWidth = `${newWidth}px`;
+        }
+    });
+    
     // Highlight functionality
     highlightButton.addEventListener('click', toggleHighlightMode);
     
@@ -191,6 +205,9 @@ function setupEventListeners() {
     
     // Add text selection event listener
     document.addEventListener('mouseup', handleHighlight);
+    
+    // Set up toggle PDF button for responsive views
+    setupTogglePdfButton();
 }
 
 // Auto-resize textarea based on content
@@ -555,14 +572,29 @@ function renderPageToContainer(pageNumber, container, callback) {
         // Get page viewport with current scale
         const viewport = page.getViewport({ scale: scale });
         
-        // Set canvas dimensions
-        pageCanvas.height = viewport.height;
-        pageCanvas.width = viewport.width;
+        // Set a higher pixel density factor for sharper rendering (2.0 means 2x the pixels)
+        const pixelDensity = 2.0;
+        
+        // Calculate dimensions with pixel density for higher quality rendering
+        const scaledWidth = Math.floor(viewport.width * pixelDensity);
+        const scaledHeight = Math.floor(viewport.height * pixelDensity);
+        
+        // Set canvas dimensions to the higher resolution
+        pageCanvas.height = scaledHeight;
+        pageCanvas.width = scaledWidth;
+        
+        // But keep the display size at the original viewport dimensions
+        pageCanvas.style.width = `${viewport.width}px`;
+        pageCanvas.style.height = `${viewport.height}px`;
         pageContainer.style.width = `${viewport.width}px`;
         pageContainer.style.height = `${viewport.height}px`;
         
         // Get canvas context
         const pageCtx = pageCanvas.getContext('2d');
+        
+        // Apply settings for crisper text rendering
+        pageCtx.imageSmoothingEnabled = true;
+        pageCtx.imageSmoothingQuality = 'high';
         
         // Add canvas to page container
         pageContainer.appendChild(pageCanvas);
@@ -570,10 +602,15 @@ function renderPageToContainer(pageNumber, container, callback) {
         // Add to container before rendering
         container.appendChild(pageContainer);
         
-        // Render PDF page
+        // Create a scaled viewport for rendering at higher resolution
+        const scaledViewport = page.getViewport({ scale: scale * pixelDensity });
+        
+        // Render PDF page with higher resolution viewport
         const renderContext = {
             canvasContext: pageCtx,
-            viewport: viewport
+            viewport: scaledViewport,
+            enableWebGL: true,
+            renderInteractiveForms: true
         };
         
         const renderTask = page.render(renderContext);
@@ -643,6 +680,11 @@ function updateZoomForAllPages() {
     const centerY = scrollTop + (containerHeight / 2);
     const scrollRatio = centerY / container.scrollHeight;
     
+    // Show a notification for large documents
+    if (pdfDoc.numPages > 10) {
+        showNotification('Updating PDF display...', 'info');
+    }
+    
     // Re-render all pages with new scale
     renderAllPages();
     
@@ -650,6 +692,13 @@ function updateZoomForAllPages() {
     requestAnimationFrame(() => {
         container.scrollTop = container.scrollHeight * scrollRatio;
         container.scrollLeft = scrollLeft * (scale / (scale - 0.25));
+        
+        // Show completion notification for large documents
+        if (pdfDoc.numPages > 10) {
+            setTimeout(() => {
+                showNotification('PDF display updated', 'success');
+            }, 500);
+        }
     });
 }
 
@@ -726,6 +775,12 @@ function search() {
         return;
     }
     
+    // Show loading spinner in search button
+    const searchBtn = document.getElementById('search-btn');
+    if (searchBtn) {
+        searchBtn.classList.add('searching');
+    }
+    
     // Clear previous highlights and reset search state
     clearSearchHighlights();
     searchResults = [];
@@ -750,13 +805,26 @@ function search() {
             }
         });
         
+        // Remove loading spinner
+        if (searchBtn) {
+            searchBtn.classList.remove('searching');
+        }
+        
         if (searchResults.length > 0) {
-            showNotification(`Found ${searchResults.length} matches`, 'info');
+            showNotification(`Found ${searchResults.length} matches`, 'success');
             showSearchControls(searchResults.length);
             navigateToSearchResult(0); // Go to first result
         } else {
             showNotification(`No matches found for "${searchTerm}"`, 'info');
             hideSearchControls();
+        }
+    }).catch(error => {
+        console.error('Search error:', error);
+        showNotification('Error during search. Please try again.', 'error');
+        
+        // Remove loading spinner on error
+        if (searchBtn) {
+            searchBtn.classList.remove('searching');
         }
     });
 }
@@ -1237,6 +1305,160 @@ function clearChat() {
     showNotification('Chat cleared successfully!', 'info');
 }
 
+// Process AI response to remove repetitive content
+function processResponseForRepetition(text) {
+    if (!text) return text;
+    
+    // Create a deep copy of the original text to work with
+    let processedText = text;
+    
+    // Step 1: Enhanced removal of repetitive phrases using more sophisticated patterns
+    const phrasesToRemove = [
+        // Common introductory phrases
+        { pattern: /(I appreciate your query[^.]*\.)\s*(I appreciate your|Let me|Based on)/i, replacement: '$1 ' },
+        { pattern: /(Based on the (?:document|text|content)[^.]*\.)\s*(?:Based on|According to|As mentioned)/i, replacement: '$1 ' },
+        { pattern: /(According to the (?:document|text|content)[^.]*\.)\s*(?:Based on|According to|As mentioned)/i, replacement: '$1 ' },
+        { pattern: /(Looking at the (?:document|text|content)[^.]*\.)\s*(?:Based on|According to|As mentioned)/i, replacement: '$1 ' },
+        { pattern: /(From the (?:document|text|content)[^.]*\.)\s*(?:Based on|According to|As mentioned)/i, replacement: '$1 ' },
+        { pattern: /(Let me (?:explain|help you understand)[^.]*\.)\s*(?:Let me|I'll|To)/i, replacement: '$1 ' },
+        { pattern: /(I can help you with that[^.]*\.)\s*(?:Let me|I'll|To)/i, replacement: '$1 ' },
+        
+        // Repeated exact sentences
+        { pattern: /([^.!?]+[.!?])\s*\1/gi, replacement: '$1' },
+        
+        // Repeated explanatory phrases
+        { pattern: /(This means[^.]*\.)\s*(?:This means|In other words|That is)/i, replacement: '$1 ' },
+        { pattern: /(In other words[^.]*\.)\s*(?:This means|In other words|That is)/i, replacement: '$1 ' },
+        { pattern: /(To clarify[^.]*\.)\s*(?:This means|In other words|To clarify)/i, replacement: '$1 ' },
+    ];
+    
+    // Apply all phrase removals
+    for (const { pattern, replacement } of phrasesToRemove) {
+        processedText = processedText.replace(pattern, replacement);
+    }
+    
+    // Step 2: Remove paragraphs that are nearly identical (similar content with minor variations)
+    const paragraphs = processedText.split(/\n\n+/);
+    const uniqueParagraphs = [];
+    
+    for (let i = 0; i < paragraphs.length; i++) {
+        const currentPara = paragraphs[i].trim();
+        let isDuplicate = false;
+        
+        if (!currentPara) continue;
+        
+        // Check if this paragraph is similar to any previous one
+        for (const existingPara of uniqueParagraphs) {
+            // Calculate similarity score (percentage of words in common)
+            const currentWords = new Set(currentPara.toLowerCase().split(/\s+/).filter(word => word.length > 3));
+            const existingWords = new Set(existingPara.toLowerCase().split(/\s+/).filter(word => word.length > 3));
+            
+            // Find common words
+            const commonWords = [...currentWords].filter(word => existingWords.has(word));
+            
+            // Calculate similarity as percentage of words in common
+            const similarityScore = commonWords.length / Math.min(currentWords.size, existingWords.size);
+            
+            // If more than 60% similar, consider it a duplicate
+            if (similarityScore > 0.6) {
+                isDuplicate = true;
+                break;
+            }
+        }
+        
+        if (!isDuplicate) {
+            uniqueParagraphs.push(currentPara);
+        }
+    }
+    
+    // Step 3: Process code blocks to avoid duplication
+    let resultText = uniqueParagraphs.join('\n\n');
+    
+    // Extract and process all code blocks
+    const codeBlockPattern = /```([\w]*)\n([\s\S]*?)```/g;
+    const codeBlocks = [];
+    let match;
+    
+    // Find all code blocks
+    while ((match = codeBlockPattern.exec(resultText)) !== null) {
+        codeBlocks.push({
+            fullMatch: match[0],
+            language: match[1],
+            code: match[2].trim(),
+            // Create a normalized version for comparison (remove whitespace, comments, etc.)
+            normalized: match[2].trim()
+                .replace(/\s+/g, ' ')
+                .replace(/\/\/[^\n]*/g, '') // Remove JavaScript/C-style single line comments
+                .replace(/\/\*[\s\S]*?\*\//g, '') // Remove JavaScript/C-style multi-line comments
+                .replace(/#[^\n]*/g, '') // Remove Python/Ruby style comments
+                .toLowerCase()
+        });
+    }
+    
+    // Identify duplicate code blocks
+    const duplicatesToRemove = new Set();
+    for (let i = 0; i < codeBlocks.length; i++) {
+        for (let j = i + 1; j < codeBlocks.length; j++) {
+            // If code blocks have the same language and very similar content
+            if (codeBlocks[i].language === codeBlocks[j].language &&
+                (codeBlocks[i].normalized === codeBlocks[j].normalized ||
+                 codeBlocks[i].normalized.includes(codeBlocks[j].normalized) ||
+                 codeBlocks[j].normalized.includes(codeBlocks[i].normalized))) {
+                
+                // Keep the longer code block, remove the shorter one
+                if (codeBlocks[i].code.length >= codeBlocks[j].code.length) {
+                    duplicatesToRemove.add(j);
+                } else {
+                    duplicatesToRemove.add(i);
+                }
+            }
+        }
+    }
+    
+    // Remove duplicate code blocks (in reverse order to maintain indices)
+    [...duplicatesToRemove].sort((a, b) => b - a).forEach(index => {
+        resultText = resultText.replace(codeBlocks[index].fullMatch, '');
+    });
+    
+    // Step 4: Clean up consecutive headings (## headings with no content between them)
+    resultText = resultText.replace(/(?:^|\n)(#+\s+.*?)(?:\n#+\s+)/g, '$1\n\n');
+    
+    // Step 5: Remove repeated sentences at the end of one paragraph and beginning of next
+    resultText = resultText.replace(/([^.!?]+[.!?])\s*\n\n\1/gi, '$1\n\n');
+    
+    // Step 6: Find and remove repetitive explanations of the same concept
+    const concepts = [
+        'function', 'method', 'class', 'object', 'array', 'variable', 'constant', 
+        'loop', 'conditional', 'if', 'for', 'while', 'parameter', 'argument', 
+        'return', 'value', 'string', 'boolean', 'number', 'integer', 'float'
+    ];
+    
+    for (const concept of concepts) {
+        // Find all sentences containing this concept
+        const conceptRegex = new RegExp(`[^.!?]*\\b${concept}\\b[^.!?]*[.!?]`, 'gi');
+        const conceptMatches = resultText.match(conceptRegex) || [];
+        
+        // If multiple sentences about the same concept, keep only the most detailed ones
+        if (conceptMatches.length > 1) {
+            // Sort by length (assuming longer explanations are more detailed)
+            conceptMatches.sort((a, b) => b.length - a.length);
+            
+            // Keep the top 2 most detailed explanations, remove others
+            for (let i = 2; i < conceptMatches.length; i++) {
+                resultText = resultText.replace(conceptMatches[i], '');
+            }
+        }
+    }
+    
+    // Final cleanup of multiple blank lines and whitespace
+    resultText = resultText
+        .replace(/\n{3,}/g, '\n\n')
+        .replace(/\s+$/gm, '')  // Remove trailing whitespace from lines
+        .trim();
+    
+    return resultText;
+}
+
 // Send a chat message
 async function sendMessage() {
     const message = chatInput.value.trim();
@@ -1285,7 +1507,14 @@ async function sendMessage() {
             try {
                 // Send query to backend
                 const answer = await window.backendIntegration.sendQueryToBackend(message, pdfText);
-                addMessageToChat(answer, 'ai');
+                
+                // Calculate a more natural typing delay based on response length
+                const typingDelay = Math.min(Math.max(500, answer.length * 2), 3000);
+                
+                // Add AI response to chat after a typing delay
+                setTimeout(() => {
+                    addMessageToChat(answer, 'ai');
+                }, typingDelay);
             } catch (error) {
                 console.error('Error processing message:', error);
                 addMessageToChat('Sorry, I encountered an error while processing your query.', 'ai');
@@ -1300,6 +1529,11 @@ async function sendMessage() {
 
 // Add a message to the chat
 function addMessageToChat(message, sender, messageType = '') {
+    // Process AI responses to remove repetition
+    if (sender === 'ai') {
+        message = processResponseForRepetition(message);
+    }
+    
     const messageElement = document.createElement('div');
     
     // Set appropriate message class based on sender and messageType
@@ -1564,9 +1798,9 @@ function simulateAiResponse(userMessage) {
     chatMessages.appendChild(typingIndicator);
     chatMessages.scrollTop = chatMessages.scrollHeight;
     
-    // Simulate typing delay
+    // Simulate initial thinking delay
     setTimeout(() => {
-        // Remove typing indicator
+        // Remove typing indicator after initial delay
         if (typingIndicator.parentNode) {
             typingIndicator.parentNode.removeChild(typingIndicator);
         }
@@ -1576,40 +1810,49 @@ function simulateAiResponse(userMessage) {
         
         // Generate response based on user message
         if (userMessage.toLowerCase().includes('hello') || userMessage.toLowerCase().includes('hi')) {
-            response = "Hello! I'm your PDF assistant. How can I help you with this document today?";
+            response = "Hello! I'm your QuPDF assistant. How can I help you with this document today?";
         } else if (userMessage.toLowerCase().includes('help')) {
-            response = "I can help you understand the content of your PDF. You can ask me questions about specific pages, search for information, or request summaries of sections.";
+            response = "I can help you understand the content of your PDF. With QuPDF, you can ask me questions about specific pages, search for information, or request summaries of sections.";
         } else if (userMessage.toLowerCase().includes('thank')) {
-            response = "You're welcome! If you have any more questions about the PDF, feel free to ask.";
+            response = "You're welcome! If you have any more questions about your document, feel free to ask. QuPDF is here to help you make the most of your PDFs.";
             messageType = 'success';
         } else if (userMessage.toLowerCase().includes('error') || userMessage.toLowerCase().includes('problem') || userMessage.toLowerCase().includes('issue')) {
-            response = "I notice you're mentioning an issue. If you're having problems with the PDF display, try using the zoom controls or navigating to a different page. If problems persist, please refresh the page.";
+            response = "I notice you're mentioning an issue. If you're having problems with the PDF display, try using the zoom controls or navigating to a different page. If problems persist, please refresh the page. QuPDF is designed to provide a smooth experience with your documents.";
             messageType = 'warning';
         } else if (userMessage.toLowerCase().includes('not working') || userMessage.toLowerCase().includes('broken')) {
-            response = "I'm sorry to hear something isn't working properly. Could you provide more details about the problem so I can try to help you resolve it?";
+            response = "I'm sorry to hear something isn't working properly with QuPDF. Could you provide more details about the problem so I can try to help you resolve it?";
             messageType = 'error';
         } else if (userMessage.toLowerCase().includes('zoom')) {
-            response = "You can use the zoom controls in the toolbar above the PDF. Click the + button to zoom in, the - button to zoom out, or the reset button to return to the default zoom level.";
+            response = "You can use the zoom controls in the QuPDF toolbar above the document. Click the + button to zoom in, the - button to zoom out, or the reset button to return to the default zoom level.";
         } else if (userMessage.toLowerCase().includes('navigate') || userMessage.toLowerCase().includes('page')) {
-            response = "To navigate between pages, use the previous and next buttons in the toolbar. You can also see your current page number and the total number of pages displayed in the center.";
+            response = "To navigate between pages in QuPDF, use the previous and next buttons in the toolbar. You can also see your current page number and the total number of pages displayed in the center.";
         } else if (userMessage.toLowerCase().includes('search')) {
-            response = "You can search for text in the PDF using the search box in the toolbar. Type your search term and press Enter or click the search icon to find matches within the document.";
+            response = "QuPDF makes it easy to search for text in your document. Use the search box in the toolbar - just type your search term and press Enter or click the search icon to find matches within the document.";
         } else if (userMessage.toLowerCase().includes('highlight')) {
-            response = "To highlight text, click the highlight button in the toolbar, then select the text you want to highlight in the PDF. Click the highlight button again to exit highlight mode.";
+            response = "To highlight text in QuPDF, click the highlight button in the toolbar, then select the text you want to highlight in the PDF. Click the highlight button again to exit highlight mode.";
         } else if (userMessage.toLowerCase().includes('download')) {
-            response = "You can download the PDF by clicking the download button in the toolbar. This will save the current PDF to your device.";
+            response = "You can download the PDF by clicking the download button in the QuPDF toolbar. This will save the current PDF to your device.";
         } else if (userMessage.toLowerCase().includes('share') || userMessage.toLowerCase().includes('export')) {
-            response = "You can share or export this chat using the buttons at the top of the chat panel. The share button allows you to share the conversation, while the export button lets you download the chat as a text file.";
+            response = "With QuPDF, you can share or export this chat using the buttons at the top of the chat panel. The share button allows you to share the conversation, while the export button lets you download the chat as a text file.";
             messageType = 'system';
         } else if (userMessage.toLowerCase().includes('clear') || userMessage.includes('delete')) {
-            response = "You can clear the chat history by clicking the trash icon at the top of the chat panel. This will remove all messages and start a new conversation.";
+            response = "You can clear the chat history by clicking the trash icon at the top of the QuPDF chat panel. This will remove all messages and start a new conversation.";
             messageType = 'system';
+        } else if (userMessage.toLowerCase().includes('what') && userMessage.toLowerCase().includes('qupdf')) {
+            response = "QuPDF is a powerful PDF viewer and AI chat assistant that helps you interact with your documents intelligently. You can chat with me about document content, search, highlight, and extract information easily from your PDFs.";
+        } else if (userMessage.toLowerCase().includes('features') || userMessage.toLowerCase().includes('can you do')) {
+            response = "QuPDF offers several powerful features: document chat to answer your questions about PDF content, easy navigation, text search, highlighting, document summaries, and the ability to export your conversations. What would you like to explore first?";
         } else {
-            response = "I've analyzed the document and found relevant information related to your question. The document discusses this topic in detail, particularly on pages 2-3 where key concepts are explained. Would you like me to elaborate on any specific aspect?";
+            response = "I've analyzed the document using QuPDF's intelligent processing and found relevant information related to your question. The document discusses this topic in detail, particularly on pages 2-3 where key concepts are explained. Would you like me to elaborate on any specific aspect?";
         }
         
-        // Add AI response to chat
-        addMessageToChat(response, 'ai', messageType);
+        // Calculate a more natural typing delay based on response length
+        const typingDelay = Math.min(Math.max(500, response.length * 2), 3000);
+        
+        // Add AI response to chat after the typing delay
+        setTimeout(() => {
+            addMessageToChat(response, 'ai', messageType);
+        }, typingDelay);
         
     }, 1500);
 }
@@ -1682,6 +1925,17 @@ function showNotification(message, type = 'info') {
 // Add search navigation functions
 function showSearchControls(totalResults) {
     const searchDiv = document.querySelector('.pdf-search');
+    const searchTerm = searchInput.value.trim();
+    
+    // Adjust container width based on term length for better fit
+    if (searchTerm) {
+        const textLength = searchTerm.length;
+        // Calculate width - longer terms need more space for the controls
+        const newWidth = Math.max(250, Math.min(350, 250 + (textLength * 8)));
+        searchDiv.style.maxWidth = `${newWidth}px`;
+    } else {
+        searchDiv.style.maxWidth = '250px';
+    }
     
     // Create or update search controls
     let controls = document.querySelector('.search-controls');
@@ -1689,12 +1943,12 @@ function showSearchControls(totalResults) {
         controls = document.createElement('div');
         controls.className = 'search-controls';
         controls.innerHTML = `
-            <span class="search-count">0 of ${totalResults}</span>
             <button class="search-nav-btn" id="prev-result" title="Previous result">
                 <svg width="16" height="16" viewBox="0 0 24 24">
                     <path fill="currentColor" d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/>
                 </svg>
             </button>
+            <span class="search-count">${currentSearchIndex + 1} of ${totalResults}</span>
             <button class="search-nav-btn" id="next-result" title="Next result">
                 <svg width="16" height="16" viewBox="0 0 24 24">
                     <path fill="currentColor" d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/>
@@ -1706,9 +1960,21 @@ function showSearchControls(totalResults) {
         // Add event listeners
         document.getElementById('prev-result').addEventListener('click', () => navigateToSearchResult(currentSearchIndex - 1));
         document.getElementById('next-result').addEventListener('click', () => navigateToSearchResult(currentSearchIndex + 1));
+    } else {
+        // Update the search count if controls already exist
+        const searchCount = controls.querySelector('.search-count');
+        if (searchCount) {
+            searchCount.textContent = `${currentSearchIndex + 1} of ${totalResults}`;
+        }
     }
     
     controls.classList.add('visible');
+    
+    // Hide the search button when controls are visible
+    const searchBtn = document.getElementById('search-btn');
+    if (searchBtn) {
+        searchBtn.style.display = 'none';
+    }
 }
 
 function hideSearchControls() {
@@ -1716,13 +1982,33 @@ function hideSearchControls() {
     if (controls) {
         controls.classList.remove('visible');
     }
+    
+    // Show the search button again
+    const searchBtn = document.getElementById('search-btn');
+    if (searchBtn) {
+        searchBtn.style.display = '';
+    }
+    
+    // Reset the search container width
+    const searchDiv = document.querySelector('.pdf-search');
+    if (searchDiv) {
+        const searchTerm = searchInput.value.trim();
+        if (searchTerm) {
+            const textLength = searchTerm.length;
+            // Adjust to the input text without controls
+            const newWidth = Math.max(220, Math.min(320, 220 + (textLength * 8)));
+            searchDiv.style.maxWidth = `${newWidth}px`;
+        } else {
+            searchDiv.style.maxWidth = '220px';
+        }
+    }
 }
 
 function navigateToSearchResult(index) {
     if (searchResults.length === 0) return;
     
     // Remove current highlight class
-    if (currentSearchIndex !== -1 && searchResults[currentSearchIndex].element) {
+    if (currentSearchIndex !== -1 && searchResults[currentSearchIndex]?.element) {
         searchResults[currentSearchIndex].element.classList.remove('current');
     }
     
@@ -1730,6 +2016,7 @@ function navigateToSearchResult(index) {
     currentSearchIndex = (index + searchResults.length) % searchResults.length;
     
     const result = searchResults[currentSearchIndex];
+    if (!result) return;
     
     // Scroll to the page containing the result
     scrollToPage(result.pageNumber);
@@ -1762,6 +2049,15 @@ function updateSearchNavButtons() {
     if (prevButton && nextButton) {
         prevButton.disabled = searchResults.length <= 1;
         nextButton.disabled = searchResults.length <= 1;
+        
+        // Add visual feedback for button state
+        if (searchResults.length <= 1) {
+            prevButton.classList.add('disabled');
+            nextButton.classList.add('disabled');
+        } else {
+            prevButton.classList.remove('disabled');
+            nextButton.classList.remove('disabled');
+        }
     }
 }
 
@@ -1784,4 +2080,66 @@ window.reprocessCurrentPDF = function() {
         // Reload PDF with new API key
         loadPdfFromData(pdfData);
     }
-}; 
+};
+
+// Function to handle toggle PDF button for mobile and tablet views
+function setupTogglePdfButton() {
+    const toggleButton = document.getElementById('toggle-pdf-button');
+    const pdfViewerSection = document.querySelector('.pdf-viewer-section');
+    
+    if (!toggleButton || !pdfViewerSection) return;
+    
+    // Initial state check
+    function updateButtonState() {
+        const isPdfHidden = pdfViewerSection.classList.contains('hidden-pdf');
+        toggleButton.textContent = isPdfHidden ? 'View PDF' : 'Close PDF';
+    }
+    
+    // Toggle visibility of PDF viewer
+    toggleButton.addEventListener('click', function() {
+        pdfViewerSection.classList.toggle('hidden-pdf');
+        updateButtonState();
+    });
+    
+    // Handle initial state based on screen size
+    function checkScreenSize() {
+        // Only for mobile and tablet views
+        if (window.innerWidth <= 1024) {
+            toggleButton.style.display = 'block';
+            
+            // On initial load, hide PDF on mobile by default
+            if (window.innerWidth <= 768 && !sessionStorage.getItem('pdfToggleState')) {
+                pdfViewerSection.classList.add('hidden-pdf');
+                updateButtonState();
+            }
+        } else {
+            toggleButton.style.display = 'none';
+            pdfViewerSection.classList.remove('hidden-pdf');
+        }
+    }
+    
+    // Check on load and resize
+    checkScreenSize();
+    updateButtonState();
+    
+    window.addEventListener('resize', function() {
+        checkScreenSize();
+        updateButtonState();
+    });
+    
+    // Store state in session storage
+    toggleButton.addEventListener('click', function() {
+        sessionStorage.setItem('pdfToggleState', pdfViewerSection.classList.contains('hidden-pdf') ? 'hidden' : 'visible');
+    });
+    
+    // Apply stored state if available
+    const storedState = sessionStorage.getItem('pdfToggleState');
+    if (storedState) {
+        if (storedState === 'hidden') {
+            pdfViewerSection.classList.add('hidden-pdf');
+        } else {
+            pdfViewerSection.classList.remove('hidden-pdf');
+        }
+        updateButtonState();
+    }
+} 

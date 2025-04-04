@@ -156,7 +156,7 @@
             <div class="chat-messages" id="chat-messages">
                 <div class="message system-message">
                     <div class="message-content">
-                        <p>Hello! I'm your AI assistant. Ask me anything about your PDF document.</p>
+                        <p>Hello! I'm your QuPDF AI assistant. Ask me anything about your PDF document.</p>
                     </div>
                 </div>
                 <!-- PDF Summary Section -->
@@ -178,7 +178,7 @@
             </div>
             
             <div class="chat-input-container">
-                <textarea id="chat-input" placeholder="Ask a question about your document..."></textarea>
+                <textarea id="chat-input" placeholder="Ask QuPDF about your document..."></textarea>
                 <button id="send-message" class="send-btn">
                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24">
                         <path fill="none" d="M0 0h24v24H0z"/>
@@ -192,6 +192,9 @@
     <!-- Load scripts in the correct order -->
     <script src="backend-integration.js"></script>
     <script src="pdf-viewer.js"></script>
+    
+    <!-- Toggle PDF Button for Mobile and Tablet Views -->
+    <button id="toggle-pdf-button" class="toggle-pdf-button">View PDF</button>
 </body>
 
 </html> 

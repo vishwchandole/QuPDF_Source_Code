@@ -267,9 +267,163 @@ ${pdfText.substring(0, 15000)}... (truncated for length)`;
         };
     } catch (error) {
         console.error('Error processing with Gemini API:', error);
-        showNotification(`Error with Gemini API: ${error.message}`, 'error');
+        showNotification(`Error: ${error.message}`, 'error');
         return mockProcessPDF(pdfFile);
     }
+}
+
+// Post-process API responses to remove repetitive content
+function postProcessApiResponse(response) {
+    if (!response) return response;
+    
+    // Create a working copy
+    let processedResponse = response;
+    
+    // Step 1: Enhanced removal of repetitive phrases using more sophisticated patterns
+    const phrasesToRemove = [
+        // Common introductory phrases
+        { pattern: /(I appreciate your query[^.]*\.)\s*(I appreciate your|Let me|Based on)/i, replacement: '$1 ' },
+        { pattern: /(Based on the (?:document|text|content)[^.]*\.)\s*(?:Based on|According to|As mentioned)/i, replacement: '$1 ' },
+        { pattern: /(According to the (?:document|text|content)[^.]*\.)\s*(?:Based on|According to|As mentioned)/i, replacement: '$1 ' },
+        { pattern: /(Looking at the (?:document|text|content)[^.]*\.)\s*(?:Based on|According to|As mentioned)/i, replacement: '$1 ' },
+        { pattern: /(From the (?:document|text|content)[^.]*\.)\s*(?:Based on|According to|As mentioned)/i, replacement: '$1 ' },
+        { pattern: /(Let me (?:explain|help you understand)[^.]*\.)\s*(?:Let me|I'll|To)/i, replacement: '$1 ' },
+        { pattern: /(I can help you with that[^.]*\.)\s*(?:Let me|I'll|To)/i, replacement: '$1 ' },
+        
+        // Repeated exact sentences
+        { pattern: /([^.!?]+[.!?])\s*\1/gi, replacement: '$1' },
+        
+        // Repeated explanatory phrases
+        { pattern: /(This means[^.]*\.)\s*(?:This means|In other words|That is)/i, replacement: '$1 ' },
+        { pattern: /(In other words[^.]*\.)\s*(?:This means|In other words|That is)/i, replacement: '$1 ' },
+        { pattern: /(To clarify[^.]*\.)\s*(?:This means|In other words|To clarify)/i, replacement: '$1 ' },
+    ];
+    
+    // Apply all phrase removals
+    for (const { pattern, replacement } of phrasesToRemove) {
+        processedResponse = processedResponse.replace(pattern, replacement);
+    }
+    
+    // Step 2: Remove paragraphs that are nearly identical (similar content with minor variations)
+    const paragraphs = processedResponse.split(/\n\n+/);
+    const uniqueParagraphs = [];
+    
+    for (let i = 0; i < paragraphs.length; i++) {
+        const currentPara = paragraphs[i].trim();
+        let isDuplicate = false;
+        
+        if (!currentPara) continue;
+        
+        // Check if this paragraph is similar to any previous one
+        for (const existingPara of uniqueParagraphs) {
+            // Calculate similarity score (percentage of words in common)
+            const currentWords = new Set(currentPara.toLowerCase().split(/\s+/).filter(word => word.length > 3));
+            const existingWords = new Set(existingPara.toLowerCase().split(/\s+/).filter(word => word.length > 3));
+            
+            // Find common words
+            const commonWords = [...currentWords].filter(word => existingWords.has(word));
+            
+            // Calculate similarity as percentage of words in common
+            const similarityScore = commonWords.length / Math.min(currentWords.size, existingWords.size);
+            
+            // If more than 60% similar, consider it a duplicate
+            if (similarityScore > 0.6) {
+                isDuplicate = true;
+                break;
+            }
+        }
+        
+        if (!isDuplicate) {
+            uniqueParagraphs.push(currentPara);
+        }
+    }
+    
+    // Step 3: Process code blocks to avoid duplication
+    let resultText = uniqueParagraphs.join('\n\n');
+    
+    // Extract and process all code blocks
+    const codeBlockPattern = /```([\w]*)\n([\s\S]*?)```/g;
+    const codeBlocks = [];
+    let match;
+    
+    // Find all code blocks
+    while ((match = codeBlockPattern.exec(resultText)) !== null) {
+        codeBlocks.push({
+            fullMatch: match[0],
+            language: match[1],
+            code: match[2].trim(),
+            // Create a normalized version for comparison (remove whitespace, comments, etc.)
+            normalized: match[2].trim()
+                .replace(/\s+/g, ' ')
+                .replace(/\/\/[^\n]*/g, '') // Remove JavaScript/C-style single line comments
+                .replace(/\/\*[\s\S]*?\*\//g, '') // Remove JavaScript/C-style multi-line comments
+                .replace(/#[^\n]*/g, '') // Remove Python/Ruby style comments
+                .toLowerCase()
+        });
+    }
+    
+    // Identify duplicate code blocks
+    const duplicatesToRemove = new Set();
+    for (let i = 0; i < codeBlocks.length; i++) {
+        for (let j = i + 1; j < codeBlocks.length; j++) {
+            // If code blocks have the same language and very similar content
+            if (codeBlocks[i].language === codeBlocks[j].language &&
+                (codeBlocks[i].normalized === codeBlocks[j].normalized ||
+                 codeBlocks[i].normalized.includes(codeBlocks[j].normalized) ||
+                 codeBlocks[j].normalized.includes(codeBlocks[i].normalized))) {
+                
+                // Keep the longer code block, remove the shorter one
+                if (codeBlocks[i].code.length >= codeBlocks[j].code.length) {
+                    duplicatesToRemove.add(j);
+                } else {
+                    duplicatesToRemove.add(i);
+                }
+            }
+        }
+    }
+    
+    // Remove duplicate code blocks (in reverse order to maintain indices)
+    [...duplicatesToRemove].sort((a, b) => b - a).forEach(index => {
+        resultText = resultText.replace(codeBlocks[index].fullMatch, '');
+    });
+    
+    // Step 4: Clean up consecutive headings (## headings with no content between them)
+    resultText = resultText.replace(/(?:^|\n)(#+\s+.*?)(?:\n#+\s+)/g, '$1\n\n');
+    
+    // Step 5: Remove repeated sentences at the end of one paragraph and beginning of next
+    resultText = resultText.replace(/([^.!?]+[.!?])\s*\n\n\1/gi, '$1\n\n');
+    
+    // Step 6: Find and remove repetitive explanations of the same concept
+    const concepts = [
+        'function', 'method', 'class', 'object', 'array', 'variable', 'constant', 
+        'loop', 'conditional', 'if', 'for', 'while', 'parameter', 'argument', 
+        'return', 'value', 'string', 'boolean', 'number', 'integer', 'float'
+    ];
+    
+    for (const concept of concepts) {
+        // Find all sentences containing this concept
+        const conceptRegex = new RegExp(`[^.!?]*\\b${concept}\\b[^.!?]*[.!?]`, 'gi');
+        const conceptMatches = resultText.match(conceptRegex) || [];
+        
+        // If multiple sentences about the same concept, keep only the most detailed ones
+        if (conceptMatches.length > 1) {
+            // Sort by length (assuming longer explanations are more detailed)
+            conceptMatches.sort((a, b) => b.length - a.length);
+            
+            // Keep the top 2 most detailed explanations, remove others
+            for (let i = 2; i < conceptMatches.length; i++) {
+                resultText = resultText.replace(conceptMatches[i], '');
+            }
+        }
+    }
+    
+    // Final cleanup of multiple blank lines and whitespace
+    resultText = resultText
+        .replace(/\n{3,}/g, '\n\n')
+        .replace(/\s+$/gm, '')  // Remove trailing whitespace from lines
+        .trim();
+    
+    return resultText;
 }
 
 // Function to query Gemini API directly from frontend
@@ -286,7 +440,7 @@ ${pdfText.substring(0, 15000)}... (truncated for length)
 Question: ${query}
 
 FORMATTING INSTRUCTIONS - FOLLOW THESE EXACTLY:
-1. If the document only briefly mentions the topic without providing a substantial explanation, respond with: "I appreciate your query. However, this document only mentions the topic without providing any detailed explanation. But don't worry—I can help explain it for you!" Then add THREE empty lines before starting your well-structured explanation.
+1. If the document only briefly mentions the topic without providing a substantial explanation, respond with: "This document only briefly mentions the topic without providing a detailed explanation. Here's what you should know:" Then add a line break before starting your explanation.
 
 2. FORMAT YOUR RESPONSE PROPERLY:
    - Keep responses concise (under 100 words per section)
@@ -295,18 +449,21 @@ FORMATTING INSTRUCTIONS - FOLLOW THESE EXACTLY:
    - Separate sections with new lines for readability
    - Highlight key terms in **bold** when needed
    - NEVER use asterisks (*) or bullet points at the beginning of any line without spacing
-   - NEVER repeat phrases like "I appreciate your query" multiple times
+   - IMPORTANT: DO NOT REPEAT the same content, explanations, or phrases multiple times in the response
 
 3. STRUCTURE YOUR RESPONSE WITH:
-   - Clear introductory paragraph
-   - Well-spaced, organized sections
+   - ONE clear introductory paragraph (don't repeat introductions)
+   - Well-spaced, organized sections (without repetition)
    - Properly indented code blocks (if applicable)
-   - Concise conclusion if appropriate
+   - AVOID explaining the same concept multiple times in different sections
 
-4. For code examples:
-   - Use proper formatting with triple backticks
-   - Include language name (e.g., \`\`\`python)
-   - Add explanatory text after code examples
+4. For programming-related questions:
+   - IMPORTANT: Provide code examples for the SPECIFIC programming language mentioned in the query (e.g., JavaScript, Python, Java, C++, etc.)
+   - Use proper formatting with triple backticks and language name (e.g., \`\`\`javascript)
+   - Include multiple approaches/methods when relevant
+   - Add brief explanatory text after each code example
+   - Show expected output where helpful
+   - NEVER repeat the same code example or explanation twice
    
 5. EXAMPLE RESPONSE FORMAT:
    ## Main Topic
@@ -319,13 +476,14 @@ FORMATTING INSTRUCTIONS - FOLLOW THESE EXACTLY:
    - First important point
    - Second important point
    
-   \`\`\`python
-   # Code example if relevant
-   def example():
-       return "result"
+   \`\`\`javascript
+   // Code example if relevant
+   function example() {
+       return "result";
+   }
    \`\`\`
 
-Your answer (ensure proper spacing):`;
+Your answer (ensure concise, well-formatted response without repetition):`;
 
         let currentKey = getCurrentApiKey();
         let response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent?key=${currentKey}`, {
@@ -382,10 +540,13 @@ Your answer (ensure proper spacing):`;
         }
 
         const data = await response.json();
-        return data.candidates[0].content.parts[0].text;
+        const rawResponse = data.candidates[0].content.parts[0].text;
+        
+        // Post-process the response to remove repetitive content
+        return postProcessApiResponse(rawResponse);
     } catch (error) {
         console.error('Error querying with Gemini API:', error);
-        showNotification(`Error with Gemini API: ${error.message}`, 'error');
+        showNotification(`Error: ${error.message}`, 'error');
         return mockQueryResponse(query, pdfText);
     }
 }
@@ -424,26 +585,24 @@ function mockQueryResponse(query, pdfText) {
 
     // Define brief mention responses with helpful explanations
     const briefMentionTopics = {
-        'climate change': "I appreciate your query. However, this document only mentions climate change without providing any detailed explanation. But don't worry—I can help explain it for you!\n\n\n\nIntroduction\nClimate change refers to long-term shifts in temperatures and weather patterns, primarily driven by human activities since the industrial revolution.\n\nCauses\nThe burning of fossil fuels like coal, oil, and gas produces heat-trapping greenhouse gases that warm the planet's surface and atmosphere.\n\nEffects\nRising global temperatures lead to melting ice caps, rising sea levels, and increasingly extreme weather events including droughts, floods, and severe storms.\n\nEcological Impact\nClimate change threatens biodiversity as ecosystems struggle to adapt to rapidly changing conditions, potentially leading to mass extinctions.\n\nHuman Impact\nChanging climate patterns affect agriculture, water resources, and human health, with disproportionate effects on vulnerable populations.",
+        'climate change': "This document only briefly mentions climate change. Here's a helpful explanation:\n\n\n\nIntroduction\nClimate change refers to long-term shifts in temperatures and weather patterns, primarily driven by human activities since the industrial revolution.\n\nCauses\nThe burning of fossil fuels like coal, oil, and gas produces heat-trapping greenhouse gases that warm the planet's surface and atmosphere.\n\nEffects\nRising global temperatures lead to melting ice caps, rising sea levels, and increasingly extreme weather events including droughts, floods, and severe storms.\n\nEcological Impact\nClimate change threatens biodiversity as ecosystems struggle to adapt to rapidly changing conditions, potentially leading to mass extinctions.\n\nHuman Impact\nChanging climate patterns affect agriculture, water resources, and human health, with disproportionate effects on vulnerable populations.",
         
-        'artificial intelligence': "I appreciate your query. However, this document only mentions artificial intelligence without providing any detailed explanation. But don't worry—I can help explain it for you!\n\n\n\nIntroduction\nArtificial Intelligence (AI) refers to computer systems designed to perform tasks that typically require human intelligence, including learning, reasoning, and problem-solving.\n\nTypes of AI\nNarrow AI is designed for specific tasks like voice recognition, while general AI aims to perform any intellectual task a human can do.\n\nMachine Learning\nA subset of AI where systems learn patterns from data without explicit programming, improving with experience.\n\nDeep Learning\nA specialized form of machine learning using neural networks with multiple layers to analyze complex patterns.\n\nApplications\nAI is used across industries including healthcare (diagnostics), finance (fraud detection), transportation (autonomous vehicles), and everyday consumer applications like virtual assistants.",
+        'artificial intelligence': "This document only briefly mentions artificial intelligence. Here's a helpful explanation:\n\n\n\nIntroduction\nArtificial Intelligence (AI) refers to computer systems designed to perform tasks that typically require human intelligence, including learning, reasoning, and problem-solving.\n\nTypes of AI\nNarrow AI is designed for specific tasks like voice recognition, while general AI aims to perform any intellectual task a human can do.\n\nMachine Learning\nA subset of AI where systems learn patterns from data without explicit programming, improving with experience.\n\nDeep Learning\nA specialized form of machine learning using neural networks with multiple layers to analyze complex patterns.\n\nApplications\nAI is used across industries including healthcare (diagnostics), finance (fraud detection), transportation (autonomous vehicles), and everyday consumer applications like virtual assistants.",
         
-        'quantum physics': "I appreciate your query. However, this document only mentions quantum physics without providing any detailed explanation. But don't worry—I can help explain it for you!\n\n\n\nIntroduction\nQuantum physics is a branch of physics that studies the behavior of matter and energy at the smallest scales, particularly at the level of atoms and subatomic particles.\n\nWave-Particle Duality\nAt the quantum level, particles like electrons and photons exhibit properties of both waves and particles simultaneously.\n\nQuantum Entanglement\nWhen particles become entangled, the state of one particle instantaneously affects the state of another, regardless of distance.\n\nQuantum Superposition\nParticles can exist in multiple states simultaneously until measured or observed.\n\nPractical Applications\nQuantum principles have led to technologies like lasers, transistors, and are foundational to developing quantum computers that could revolutionize computing power and cryptography.",
+        'quantum physics': "This document only briefly mentions quantum physics. Here's a helpful explanation:\n\n\n\nIntroduction\nQuantum physics is a branch of physics that studies the behavior of matter and energy at the smallest scales, particularly at the level of atoms and subatomic particles.\n\nWave-Particle Duality\nAt the quantum level, particles like electrons and photons exhibit properties of both waves and particles simultaneously.\n\nQuantum Entanglement\nWhen particles become entangled, the state of one particle instantaneously affects the state of another, regardless of distance.\n\nQuantum Superposition\nParticles can exist in multiple states simultaneously until measured or observed.\n\nPractical Applications\nQuantum principles have led to technologies like lasers, transistors, and are foundational to developing quantum computers that could revolutionize computing power and cryptography.",
         
-        'blockchain': "I appreciate your query. However, this document only mentions blockchain without providing any detailed explanation. But don't worry—I can help explain it for you!\n\n\n\nIntroduction\nBlockchain is a distributed database or ledger technology where information is stored in blocks that are linked together in a secure, chronological chain.\n\nKey Characteristics\nEach block contains transaction data, a timestamp, and a cryptographic link to the previous block, making the data highly secure and resistant to modification.\n\nDecentralization\nBlockchain operates on a peer-to-peer network without central authority, with transactions verified by network consensus rather than a single entity.\n\nApplications Beyond Cryptocurrency\nWhile blockchain powers cryptocurrencies like Bitcoin, its applications extend to supply chain management, voting systems, smart contracts, and digital identity verification.\n\nSecurity Features\nThe distributed nature and cryptographic protection make blockchain highly secure against fraud and tampering, though not completely immune to all vulnerabilities.",
+        'blockchain': "This document only briefly mentions blockchain. Here's a helpful explanation:\n\n\n\nIntroduction\nBlockchain is a distributed database or ledger technology where information is stored in blocks that are linked together in a secure, chronological chain.\n\nKey Characteristics\nEach block contains transaction data, a timestamp, and a cryptographic link to the previous block, making the data highly secure and resistant to modification.\n\nDecentralization\nBlockchain operates on a peer-to-peer network without central authority, with transactions verified by network consensus rather than a single entity.\n\nApplications Beyond Cryptocurrency\nWhile blockchain powers cryptocurrencies like Bitcoin, its applications extend to supply chain management, voting systems, smart contracts, and digital identity verification.\n\nSecurity Features\nThe distributed nature and cryptographic protection make blockchain highly secure against fraud and tampering, though not completely immune to all vulnerabilities.",
         
-        'neural networks': "I appreciate your query. However, this document only mentions neural networks without providing any detailed explanation. But don't worry—I can help explain it for you!\n\n\n\nIntroduction\nNeural networks are computing systems inspired by the human brain's biological neural networks, consisting of interconnected nodes or 'neurons' that process information.\n\nStructure\nA typical neural network contains an input layer that receives data, hidden layers that perform computations, and an output layer that produces results.\n\nLearning Process\nNeural networks learn through training with large datasets, adjusting connection weights between neurons to minimize errors and optimize outcomes.\n\nDeep Neural Networks\nNetworks with many hidden layers can identify complex patterns and relationships in data, powering advances in image recognition, natural language processing, and other domains.\n\nPractical Applications\nNeural networks drive technologies like facial recognition, language translation, recommendation systems, medical diagnostics, and autonomous vehicles.",
+        'neural networks': "This document only briefly mentions neural networks. Here's a helpful explanation:\n\n\n\nIntroduction\nNeural networks are computing systems inspired by the human brain's biological neural networks, consisting of interconnected nodes or 'neurons' that process information.\n\nStructure\nA typical neural network contains an input layer that receives data, hidden layers that perform computations, and an output layer that produces results.\n\nLearning Process\nNeural networks learn through training with large datasets, adjusting connection weights between neurons to minimize errors and optimize outcomes.\n\nDeep Neural Networks\nNetworks with many hidden layers can identify complex patterns and relationships in data, powering advances in image recognition, natural language processing, and other domains.\n\nPractical Applications\nNeural networks drive technologies like facial recognition, language translation, recommendation systems, medical diagnostics, and autonomous vehicles.",
         
-        'cryptocurrency': "I appreciate your query. However, this document only mentions cryptocurrency without providing any detailed explanation. But don't worry—I can help explain it for you!\n\n\n\nIntroduction\nCryptocurrency is a digital or virtual currency that uses cryptography for security and operates on decentralized networks based on blockchain technology.\n\nDecentralized Nature\nUnlike traditional currencies issued by governments, cryptocurrencies typically operate independently of central banks, with transactions verified by network nodes through cryptography.\n\nPopular Cryptocurrencies\nBitcoin, created in 2009, was the first cryptocurrency. Others include Ethereum, which supports smart contracts, and stablecoins that attempt to maintain price stability.\n\nTransaction Process\nCryptocurrency transactions are recorded on a distributed public ledger called a blockchain, ensuring transparency and security.\n\nVolatility and Regulation\nCryptocurrencies are known for price volatility and face varying regulatory approaches across different countries, from full adoption to outright bans.",
+        'cryptocurrency': "This document only briefly mentions cryptocurrency. Here's a helpful explanation:\n\n\n\nIntroduction\nCryptocurrency is a digital or virtual currency that uses cryptography for security and operates on decentralized networks based on blockchain technology.\n\nDecentralized Nature\nUnlike traditional currencies issued by governments, cryptocurrencies typically operate independently of central banks, with transactions verified by network nodes through cryptography.\n\nPopular Cryptocurrencies\nBitcoin, created in 2009, was the first cryptocurrency. Others include Ethereum, which supports smart contracts, and stablecoins that attempt to maintain price stability.\n\nTransaction Process\nCryptocurrency transactions are recorded on a distributed public ledger called a blockchain, ensuring transparency and security.\n\nVolatility and Regulation\nCryptocurrencies are known for price volatility and face varying regulatory approaches across different countries, from full adoption to outright bans.",
         
-        'python programming': "I appreciate your query. However, this document only mentions Python programming without providing any detailed explanation. But don't worry—I can help explain it for you!\n\n\n\n## Python Programming\nPython is a high-level, interpreted programming language known for its readability and simplicity. It supports multiple programming paradigms including procedural, object-oriented, and functional programming.\n\n### Key Features\n- Simple, readable syntax with whitespace indentation\n- Dynamic typing and memory management\n- Extensive standard library and third-party packages\n- Cross-platform compatibility\n\n### Popular Applications\n\n#### Web Development\nFrameworks like Django and Flask enable building robust web applications efficiently.\n\n#### Data Science\nLibraries including Pandas, NumPy, and Matplotlib make Python ideal for data analysis.\n\n#### Machine Learning\nTensorFlow, PyTorch, and scikit-learn facilitate creating sophisticated models.\n\n```python\n# Simple Python example\ndef greet(name):\n    return f\"Hello, {name}!\"\n\nprint(greet(\"World\"))  # Output: Hello, World!\n```"
+        'python programming': "This document only briefly mentions Python programming. Here's a helpful explanation:\n\n\n\n## Python Programming\nPython is a high-level, interpreted programming language known for its readability and simplicity. It supports multiple programming paradigms including procedural, object-oriented, and functional programming.\n\n### Key Features\n- Simple, readable syntax with whitespace indentation\n- Dynamic typing and memory management\n- Extensive standard library and third-party packages\n- Cross-platform compatibility\n\n### Popular Applications\n\n#### Web Development\nFrameworks like Django and Flask enable building robust web applications efficiently.\n\n#### Data Science\nLibraries including Pandas, NumPy, and Matplotlib make Python ideal for data analysis.\n\n#### Machine Learning\nTensorFlow, PyTorch, and scikit-learn facilitate creating sophisticated models.\n\n```python\n# Simple Python example\ndef greet(name):\n    return f\"Hello, {name}!\"\n\nprint(greet(\"World\"))  # Output: Hello, World!\n```"
     };
 
     // Add programming-related topics with well-formatted code examples
     const codeExamples = {
-        'python pattern': `I appreciate your query about Python patterns. The document mentions this topic, and I can provide a detailed explanation with examples.
-
-Python Program to Display a Pattern
+        'python pattern': `## Python Pattern Programs
 
 Method 1: Using Nested Loops
 
@@ -492,9 +651,7 @@ Expected Output:
 10 12 14 16 18  
 \`\`\``,
 
-        'javascript function': `I appreciate your query about JavaScript functions. The document mentions this topic, and I can provide a detailed explanation with examples.
-
-JavaScript Functions: An Overview
+        'javascript function': `## JavaScript Functions: An Overview
 
 Introduction
 Functions are one of the fundamental building blocks in JavaScript. They allow you to define reusable blocks of code that can be executed when needed.
@@ -561,9 +718,352 @@ Arrow functions provide a more concise syntax for writing functions.
 The 'return' keyword can be omitted for single-expression functions.
 Arrow functions inherit 'this' from their surrounding context.`,
 
-        'data structures': `I appreciate your query about data structures. The document mentions this topic, and I can provide a detailed explanation with examples.
+        'java classes': `## Java Classes and Objects
 
-Common Data Structures in Programming
+Java classes are templates for creating objects, providing initial values for state (member variables) and implementations of behavior (member functions).
+
+Method 1: Basic Class Structure
+
+\`\`\`java
+// Define a simple Rectangle class
+public class Rectangle {
+    // Instance variables
+    private double width;
+    private double height;
+    
+    // Constructor
+    public Rectangle(double width, double height) {
+        this.width = width;
+        this.height = height;
+    }
+    
+    // Method to calculate area
+    public double calculateArea() {
+        return width * height;
+    }
+    
+    // Method to calculate perimeter
+    public double calculatePerimeter() {
+        return 2 * (width + height);
+    }
+    
+    // Getters and setters
+    public double getWidth() {
+        return width;
+    }
+    
+    public void setWidth(double width) {
+        this.width = width;
+    }
+    
+    public double getHeight() {
+        return height;
+    }
+    
+    public void setHeight(double height) {
+        this.height = height;
+    }
+}
+
+// Using the Rectangle class
+public class Main {
+    public static void main(String[] args) {
+        Rectangle rect = new Rectangle(5, 10);
+        System.out.println("Area: " + rect.calculateArea());       // Output: Area: 50.0
+        System.out.println("Perimeter: " + rect.calculatePerimeter()); // Output: Perimeter: 30.0
+    }
+}
+\`\`\`
+
+Method 2: Inheritance
+
+\`\`\`java
+// Parent class
+public class Shape {
+    protected String color;
+    
+    public Shape(String color) {
+        this.color = color;
+    }
+    
+    public String getColor() {
+        return color;
+    }
+    
+    // Method to be overridden by subclasses
+    public double calculateArea() {
+        return 0.0;
+    }
+}
+
+// Child class
+public class Circle extends Shape {
+    private double radius;
+    
+    public Circle(String color, double radius) {
+        super(color);
+        this.radius = radius;
+    }
+    
+    // Override the calculateArea method
+    @Override
+    public double calculateArea() {
+        return Math.PI * radius * radius;
+    }
+}
+
+// Usage
+public class Main {
+    public static void main(String[] args) {
+        Circle circle = new Circle("Red", 5);
+        System.out.println("Color: " + circle.getColor());     // Output: Color: Red
+        System.out.println("Area: " + circle.calculateArea()); // Output: Area: 78.53981633974483
+    }
+}
+\`\`\`
+
+Explanation:
+- Classes encapsulate data and behavior
+- Constructors initialize objects
+- Methods define behavior
+- Inheritance allows creating specialized subclasses`,
+
+        'cpp vectors': `## C++ Vectors
+
+Vectors in C++ are sequence containers representing arrays that can change in size. They provide dynamic array functionality.
+
+Method 1: Basic Vector Operations
+
+\`\`\`cpp
+#include <iostream>
+#include <vector>
+
+int main() {
+    // Create an empty vector
+    std::vector<int> numbers;
+    
+    // Add elements to the end
+    numbers.push_back(10);
+    numbers.push_back(20);
+    numbers.push_back(30);
+    
+    // Access elements using index
+    std::cout << "First element: " << numbers[0] << std::endl;  // Output: First element: 10
+    
+    // Get vector size
+    std::cout << "Size: " << numbers.size() << std::endl;      // Output: Size: 3
+    
+    // Iterate through vector
+    std::cout << "Elements: ";
+    for (int num : numbers) {
+        std::cout << num << " ";
+    }
+    std::cout << std::endl;  // Output: Elements: 10 20 30
+    
+    // Remove last element
+    numbers.pop_back();
+    
+    // Insert element at specific position
+    numbers.insert(numbers.begin() + 1, 15);
+    
+    // Print modified vector
+    std::cout << "Modified elements: ";
+    for (int num : numbers) {
+        std::cout << num << " ";
+    }
+    std::cout << std::endl;  // Output: Modified elements: 10 15 20
+    
+    return 0;
+}
+\`\`\`
+
+Method 2: Vector Algorithms with Standard Library
+
+\`\`\`cpp
+#include <iostream>
+#include <vector>
+#include <algorithm>
+
+int main() {
+    // Initialize vector with values
+    std::vector<int> numbers = {5, 2, 8, 1, 9, 3};
+    
+    // Sort the vector
+    std::sort(numbers.begin(), numbers.end());
+    
+    // Print sorted vector
+    std::cout << "Sorted: ";
+    for (int num : numbers) {
+        std::cout << num << " ";
+    }
+    std::cout << std::endl;  // Output: Sorted: 1 2 3 5 8 9
+    
+    // Find element in vector
+    auto it = std::find(numbers.begin(), numbers.end(), 5);
+    if (it != numbers.end()) {
+        std::cout << "Found 5 at position: " << (it - numbers.begin()) << std::endl;
+    }
+    
+    // Sum all elements
+    int sum = 0;
+    for (int num : numbers) {
+        sum += num;
+    }
+    std::cout << "Sum: " << sum << std::endl;  // Output: Sum: 28
+    
+    return 0;
+}
+\`\`\`
+
+Explanation:
+- Vectors are dynamic arrays that resize automatically
+- push_back() adds elements to the end
+- Access elements via [] operator or at()
+- Standard library algorithms can operate on vectors
+- Iterators provide a way to traverse elements`,
+
+        'csharp linq': `## C# LINQ Examples
+
+LINQ (Language Integrated Query) provides a consistent syntax for querying various data sources in C#.
+
+Method 1: LINQ Query Syntax
+
+\`\`\`csharp
+using System;
+using System.Collections.Generic;
+using System.Linq;
+
+class Program
+{
+    static void Main()
+    {
+        // Sample data
+        List<int> numbers = new List<int> { 5, 10, 8, 3, 6, 12 };
+        
+        // Query syntax: Get even numbers greater than 5
+        var evenNumbersQuery =
+            from num in numbers
+            where num > 5 && num % 2 == 0
+            orderby num
+            select num;
+        
+        // Display results
+        Console.WriteLine("Even numbers greater than 5 (Query Syntax):");
+        foreach (var num in evenNumbersQuery)
+        {
+            Console.Write($"{num} ");  // Output: 6 8 10 12
+        }
+        Console.WriteLine();
+    }
+}
+\`\`\`
+
+Method 2: LINQ Method Syntax
+
+\`\`\`csharp
+using System;
+using System.Collections.Generic;
+using System.Linq;
+
+class Program
+{
+    static void Main()
+    {
+        // Sample data
+        List<string> fruits = new List<string> 
+        { 
+            "apple", "banana", "orange", "grape", "kiwi", "pineapple" 
+        };
+        
+        // Method syntax: Get fruits that have more than 5 characters
+        var longFruits = fruits
+            .Where(f => f.Length > 5)
+            .OrderBy(f => f.Length)
+            .Select(f => f);
+        
+        // Display results
+        Console.WriteLine("Fruits with more than 5 characters:");
+        foreach (var fruit in longFruits)
+        {
+            Console.WriteLine($"{fruit} ({fruit.Length} chars)");
+        }
+        // Output:
+        // banana (6 chars)
+        // orange (6 chars)
+        // pineapple (9 chars)
+        
+        // LINQ aggregation methods
+        int count = fruits.Count();
+        string longest = fruits.OrderByDescending(f => f.Length).First();
+        
+        Console.WriteLine($"Total fruits: {count}");        // Output: Total fruits: 6
+        Console.WriteLine($"Longest fruit: {longest}");     // Output: Longest fruit: pineapple
+    }
+}
+\`\`\`
+
+Method 3: LINQ with Complex Objects
+
+\`\`\`csharp
+using System;
+using System.Collections.Generic;
+using System.Linq;
+
+class Student
+{
+    public int Id { get; set; }
+    public string Name { get; set; }
+    public int Age { get; set; }
+    public List<string> Courses { get; set; }
+}
+
+class Program
+{
+    static void Main()
+    {
+        // Create sample data
+        List<Student> students = new List<Student>
+        {
+            new Student { Id = 1, Name = "Alice", Age = 22, Courses = new List<string> { "Math", "Physics", "Chemistry" } },
+            new Student { Id = 2, Name = "Bob", Age = 20, Courses = new List<string> { "History", "English", "Art" } },
+            new Student { Id = 3, Name = "Charlie", Age = 22, Courses = new List<string> { "Physics", "Computer Science" } }
+        };
+        
+        // Find students taking Physics
+        var physicsStudents = students
+            .Where(s => s.Courses.Contains("Physics"))
+            .Select(s => s.Name);
+        
+        Console.WriteLine("Students taking Physics:");
+        foreach (var name in physicsStudents)
+        {
+            Console.WriteLine(name);  // Output: Alice, Charlie
+        }
+        
+        // Group students by age
+        var studentsByAge = students
+            .GroupBy(s => s.Age)
+            .Select(g => new { Age = g.Key, Count = g.Count() });
+        
+        Console.WriteLine("\nStudents by age:");
+        foreach (var group in studentsByAge)
+        {
+            Console.WriteLine($"Age {group.Age}: {group.Count} student(s)");
+        }
+        // Output:
+        // Age 22: 2 student(s)
+        // Age 20: 1 student(s)
+    }
+}
+\`\`\`
+
+Explanation:
+- LINQ provides a unified way to query collections
+- Query syntax resembles SQL
+- Method syntax uses extension methods
+- LINQ works with various data sources including collections, XML, and databases`,
+
+        'data structures': `## Common Data Structures in Programming
 
 Introduction
 Data structures are specialized formats for organizing, processing, retrieving and storing data. Different data structures are suited for different kinds of applications, and some are highly specialized to specific tasks.
