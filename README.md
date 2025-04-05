@@ -10,7 +10,7 @@ QuPDF is a web application that allows users to view PDF documents and interact 
 - AI-powered PDF summary generation
 - AI-generated suggested questions
 - Interactive chat interface for asking questions about the PDF content
-- Share and export chat functionality
+- Export chat functionality
 
 ## Prerequisites
 
