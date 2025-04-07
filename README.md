@@ -78,6 +78,6 @@ python app.py
 - The application processes PDFs locally and only sends text content to the AI API
 - All communication with the backend is done over HTTP (consider using HTTPS in production)
 
-## License
+## Author
 
-[Your chosen license] 
+Created with ❤️ by **Team QuPDF**
