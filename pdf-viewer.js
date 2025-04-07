@@ -163,6 +163,12 @@ function setupEventListeners() {
         // Ensure the chat input is properly initialized
         chatInput.value = '';
         chatInput.style.height = 'auto';
+        chatInput.style.display = 'block'; // Make sure it's visible
+        
+        // Focus the chat input
+        setTimeout(() => {
+            chatInput.focus();
+        }, 500);
         
         // Initial call to set correct height
         autoResizeChatInput.call(chatInput);
@@ -220,16 +226,24 @@ function autoResizeChatInput() {
     const scrollHeight = this.scrollHeight;
     
     // Calculate new height (with min and max constraints)
-    const newHeight = Math.min(Math.max(scrollHeight, 36), 100);
+    const newHeight = Math.min(Math.max(scrollHeight, 48), 150);
     
     // Apply the new height
     this.style.height = newHeight + 'px';
     
     // Show/hide scrollbar based on content
-    if (scrollHeight > 100) {
+    if (scrollHeight > 150) {
         this.style.overflowY = 'auto';
     } else {
         this.style.overflowY = 'hidden';
+    }
+    
+    // Adjust chat container to make room for expanded input
+    const chatMessages = document.querySelector('.chat-messages');
+    if (chatMessages) {
+        const inputContainer = document.querySelector('.chat-input-container');
+        const inputHeight = inputContainer.offsetHeight;
+        chatMessages.style.height = `calc(100% - ${inputHeight}px)`;
     }
 }
 
@@ -378,116 +392,232 @@ async function loadPdfFromData(base64Data) {
         // Create a File object from the Blob
         const pdfFile = new File([pdfBlob], 'document.pdf', { type: 'application/pdf' });
 
-        // Add initial summary to chat
-        displayPdfSummary();
-
-        // Process PDF with backend
-        try {
-            console.log('Starting PDF processing with backend');
-            const processedData = await window.backendIntegration.processPDFWithBackend(pdfFile);
-            console.log('Received processed data:', processedData);
-            
-            if (processedData) {
-                // Update UI with processed data - replace dummy content with real content
-                if (processedData.summary) {
-                    console.log('Summary data received:', processedData.summary);
-                    
-                    // Find the existing summary elements in the DOM using more specific selectors
-                    const summaryMessage = document.querySelector('.summary-message');
-                    if (!summaryMessage) {
-                        console.error('Could not find summary message element');
-                        return;
-                    }
-                    
-                    const overviewElement = summaryMessage.querySelector('.summary-section:nth-of-type(1) p');
-                    const keyPointsList = summaryMessage.querySelector('.summary-section:nth-of-type(2) ul');
-                    
-                    console.log('Found summary elements:', {
-                        overviewElement: !!overviewElement,
-                        keyPointsList: !!keyPointsList
-                    });
-                    
-                    if (overviewElement && keyPointsList) {
-                        // Clean and prepare the summary
-                        let summaryText = processedData.summary;
-                        
-                        // Remove "Key Points:" section if present in the summary
-                        const keyPointsIndex = summaryText.indexOf('\n\nKey Points:');
-                        if (keyPointsIndex > -1) {
-                            summaryText = summaryText.substring(0, keyPointsIndex);
-                        }
-                        
-                        // Update the overview paragraph directly with the clean summary
-                        console.log('Updating overview with text:', summaryText);
-                        overviewElement.textContent = summaryText;
-                        
-                        // Clear existing key points
-                        keyPointsList.innerHTML = '';
-                        
-                        // Add new key points
-                        if (processedData.keyPoints && processedData.keyPoints.length > 0) {
-                            processedData.keyPoints.forEach(point => {
-                                // Remove any asterisks or bullet points from the beginning
-                                let cleanedPoint = point.replace(/^\s*\*\s+/g, '').trim();
-                                
-                                const li = document.createElement('li');
-                                li.textContent = cleanedPoint;
-                                keyPointsList.appendChild(li);
-                            });
-                        } else {
-                            // Fall back to extracting key points from the summary if needed
-                            console.log('Extracting key points from summary');
-                            const sentences = summaryText.split(/[.!?]+/).filter(s => s.trim().length > 0);
-                            
-                            // Get 5-6 key points
-                            const keyPoints = sentences.slice(0, Math.min(6, sentences.length)).map(s => s.trim());
-                            
-                            keyPoints.forEach(point => {
-                                // Remove any asterisks or bullet points
-                                let cleanedPoint = point.replace(/^\s*\*\s+/g, '').trim();
-                                
-                                const li = document.createElement('li');
-                                li.textContent = cleanedPoint;
-                                keyPointsList.appendChild(li);
-                            });
-                        }
-                        
-                        console.log('Summary updated successfully');
-                    } else {
-                        console.error('Could not find summary elements to update');
-                    }
-                } else {
-                    console.warn('No summary data in processed response');
-                }
-            } else {
-                console.warn('No processed data received');
-            }
-        } catch (error) {
-            console.error('Error processing PDF with backend:', error);
-            // Continue with PDF display even if backend processing fails
-        }
-
-        // Load PDF using PDF.js
-        showNotification('Loading PDF...', 'info');
+        // Start loading PDF immediately (don't wait for summary)
         const loadingTask = pdfjsLib.getDocument({ data: array });
-
+        
+        // Load PDF in parallel with summary generation
         loadingTask.promise.then(function(pdf) {
             pdfDoc = pdf;
             totalPagesSpan.textContent = pdf.numPages;
             currentPageSpan.textContent = pageNum;
 
-            // Render all pages
+            // Render all pages immediately
             renderAllPages();
-            
-            showNotification('PDF loaded successfully!', 'success');
         }).catch(function(error) {
             console.error('Error loading PDF:', error);
             showNotification('Error loading PDF. Please try again.', 'error');
         });
 
+        // Add initial summary with loading animation to chat
+        displayPdfSummaryWithLoading();
+
+        // Process PDF with backend in parallel
+        processSummaryInBackground(pdfFile);
+
     } catch (error) {
         console.error('Error loading PDF:', error);
         showNotification('Error loading PDF. Please try again.', 'error');
+    }
+}
+
+// Display PDF summary with loading animations
+function displayPdfSummaryWithLoading() {
+    // Clear existing chat messages
+    chatMessages.innerHTML = '';
+    
+    // Add welcome message with QuPDF branding
+    const welcomeMessage = document.createElement('div');
+    welcomeMessage.className = 'message system-message welcome-message';
+    welcomeMessage.innerHTML = `
+        <div class="">
+            <div class="welcome-header">
+                <h2>Welcome to <img src="assests/QuPDF.svg" alt="QuPDF Logo" class="welcome-logo-text"></h2>
+            </div>
+            <p class="welcome-text">Your intelligent PDF companion is ready to help you explore and understand your document.</p>
+        </div>
+    `;
+    chatMessages.appendChild(welcomeMessage);
+    
+    // Add a divider between welcome message and summary
+    const divider = document.createElement('div');
+    divider.className = 'message-divider';
+    chatMessages.appendChild(divider);
+    
+    // Add system message with loading animation for summary
+    const systemMessage = document.createElement('div');
+    systemMessage.className = 'message system-message summary-message';
+    systemMessage.innerHTML = `
+        <div class="message-content">
+            <div class="summary-header">
+                <h3>Document Summary</h3>
+            </div>
+            <div class="summary-content">
+                <div class="summary-section">
+                    <h4>Overview</h4>
+                    <div class="summary-loading">
+                        <div class="loading-spinner-container">
+                            <div class="loading-spinner">
+                                <div></div><div></div><div></div><div></div>
+                            </div>
+                            <p>Generating summary...</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="summary-section">
+                    <h4>Key Points</h4>
+                    <div class="typing-indicator chat-typing-indicator">
+                        <div class="typing-dot"></div>
+                        <div class="typing-dot"></div>
+                        <div class="typing-dot"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+    chatMessages.appendChild(systemMessage);
+    
+    // Add to chat history
+    chatHistory.push({
+        sender: 'system',
+        message: 'Welcome message and PDF Summary displayed',
+        messageType: 'system',
+        timestamp: new Date().toISOString()
+    });
+}
+
+// Process summary in background
+async function processSummaryInBackground(pdfFile) {
+    try {
+        console.log('Starting PDF processing with backend');
+        const processedData = await window.backendIntegration.processPDFWithBackend(pdfFile);
+        console.log('Received processed data:', processedData);
+        
+        if (processedData) {
+            // Update UI with processed data - replace loading animations with real content
+            if (processedData.summary) {
+                console.log('Summary data received:', processedData.summary);
+                
+                // Find the existing summary elements in the DOM
+                const summaryMessage = document.querySelector('.summary-message');
+                if (!summaryMessage) {
+                    console.error('Could not find summary message element');
+                    return;
+                }
+                
+                const summarySection = summaryMessage.querySelector('.summary-section:nth-of-type(1)');
+                const keyPointsSection = summaryMessage.querySelector('.summary-section:nth-of-type(2)');
+                
+                // Remove loading animations
+                const loadingElement = summarySection.querySelector('.summary-loading');
+                const typingIndicator = keyPointsSection.querySelector('.typing-indicator');
+                
+                if (loadingElement) {
+                    // Replace loading with actual content
+                    const overviewContent = document.createElement('p');
+                    
+                    // Clean and prepare the summary
+                    let summaryText = processedData.summary;
+                    
+                    // Remove "Key Points:" section if present in the summary
+                    const keyPointsIndex = summaryText.indexOf('\n\nKey Points:');
+                    if (keyPointsIndex > -1) {
+                        summaryText = summaryText.substring(0, keyPointsIndex);
+                    }
+                    
+                    overviewContent.textContent = summaryText;
+                    summarySection.replaceChild(overviewContent, loadingElement);
+                }
+                
+                if (typingIndicator) {
+                    // Create a list for key points
+                    const keyPointsList = document.createElement('ul');
+                    
+                    // Add new key points
+                    if (processedData.keyPoints && processedData.keyPoints.length > 0) {
+                        processedData.keyPoints.forEach(point => {
+                            // Remove any asterisks or bullet points from the beginning
+                            let cleanedPoint = point.replace(/^\s*\*\s+/g, '').trim();
+                            
+                            const li = document.createElement('li');
+                            li.textContent = cleanedPoint;
+                            keyPointsList.appendChild(li);
+                        });
+                    } else {
+                        // Fall back to extracting key points from the summary if needed
+                        console.log('Extracting key points from summary');
+                        const sentences = summaryText.split(/[.!?]+/).filter(s => s.trim().length > 0);
+                        
+                        // Get 5-6 key points
+                        const keyPoints = sentences.slice(0, Math.min(6, sentences.length)).map(s => s.trim());
+                        
+                        keyPoints.forEach(point => {
+                            // Remove any asterisks or bullet points
+                            let cleanedPoint = point.replace(/^\s*\*\s+/g, '').trim();
+                            
+                            const li = document.createElement('li');
+                            li.textContent = cleanedPoint;
+                            keyPointsList.appendChild(li);
+                        });
+                    }
+                    
+                    // Replace typing indicator with key points list
+                    keyPointsSection.replaceChild(keyPointsList, typingIndicator);
+                }
+                
+                console.log('Summary updated successfully');
+            } else {
+                console.warn('No summary data in processed response');
+                // Replace loading animations with fallback content
+                replaceLoadingWithFallbackContent();
+            }
+        } else {
+            console.warn('No processed data received');
+            // Replace loading animations with fallback content
+            replaceLoadingWithFallbackContent();
+        }
+    } catch (error) {
+        console.error('Error processing PDF with backend:', error);
+        // Replace loading animations with fallback content
+        replaceLoadingWithFallbackContent();
+    }
+}
+
+// Function to replace loading animations with fallback content
+function replaceLoadingWithFallbackContent() {
+    const summaryMessage = document.querySelector('.summary-message');
+    if (!summaryMessage) return;
+    
+    const summarySection = summaryMessage.querySelector('.summary-section:nth-of-type(1)');
+    const keyPointsSection = summaryMessage.querySelector('.summary-section:nth-of-type(2)');
+    
+    // Remove loading spinner and add fallback content
+    const loadingElement = summarySection.querySelector('.summary-loading');
+    if (loadingElement) {
+        const fallbackOverview = document.createElement('p');
+        fallbackOverview.textContent = "Unable to generate a summary for this document. The document may be encrypted, scanned, or contain primarily non-text elements.";
+        summarySection.replaceChild(fallbackOverview, loadingElement);
+    }
+    
+    // Remove typing indicator and add fallback key points
+    const typingIndicator = keyPointsSection.querySelector('.typing-indicator');
+    if (typingIndicator) {
+        const fallbackList = document.createElement('ul');
+        
+        const fallbackPoints = [
+            "Try navigating through the document using the navigation controls",
+            "Use the search feature to find specific information",
+            "Highlight important text using the highlight tool",
+            "Ask specific questions about the document content",
+            "Download the PDF if you need to save it locally"
+        ];
+        
+        fallbackPoints.forEach(point => {
+            const li = document.createElement('li');
+            li.textContent = point;
+            fallbackList.appendChild(li);
+        });
+        
+        keyPointsSection.replaceChild(fallbackList, typingIndicator);
     }
 }
 
@@ -1447,14 +1577,43 @@ function processResponseForRepetition(text) {
 
 // Send a chat message
 async function sendMessage() {
-    const message = chatInput.value.trim();
-    if (!message) return;
-
+    // Get message text
+    const messageText = chatInput.value.trim();
+    
+    // Check if message is empty
+    if (messageText === '') {
+        // Visual feedback for empty message
+        chatInput.classList.add('error-shake');
+        setTimeout(() => {
+            chatInput.classList.remove('error-shake');
+        }, 500);
+        return;
+    }
+    
     // Add user message to chat
-    addMessageToChat(message, 'user');
+    addMessageToChat(messageText, 'user');
+    
+    // Clear input
     chatInput.value = '';
-    autoResizeChatInput.call(chatInput);
-
+    
+    // Reset input height
+    chatInput.style.height = '48px';
+    chatInput.style.overflowY = 'hidden';
+    
+    // Adjust chat container height
+    const chatMessages = document.querySelector('.chat-messages');
+    const inputContainer = document.querySelector('.chat-input-container');
+    if (chatMessages && inputContainer) {
+        const inputHeight = inputContainer.offsetHeight;
+        chatMessages.style.height = `calc(100% - ${inputHeight}px)`;
+    }
+    
+    // Focus on input again
+    chatInput.focus();
+    
+    // Scroll to bottom of chat
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+    
     try {
         // Get PDF text from the current document (or use a placeholder if extraction fails)
         let pdfText = '';
@@ -1483,29 +1642,45 @@ async function sendMessage() {
         chatMessages.appendChild(typingIndicator);
         chatMessages.scrollTop = chatMessages.scrollHeight;
 
-        // Send query to backend with delay to show typing indicator
+        // Process the query with a small delay to show typing animation
         setTimeout(async () => {
-            // Remove typing indicator
-            if (typingIndicator.parentNode) {
-                typingIndicator.parentNode.removeChild(typingIndicator);
-            }
-
             try {
-                // Send query to backend
-                const answer = await window.backendIntegration.sendQueryToBackend(message, pdfText);
-                
-                // Calculate a more natural typing delay based on response length
-                const typingDelay = Math.min(Math.max(500, answer.length * 2), 3000);
-                
-                // Add AI response to chat after a typing delay
-                setTimeout(() => {
-                    addMessageToChat(answer, 'ai');
-                }, typingDelay);
+                // Check if backend integration is available
+                if (window.backendIntegration && typeof window.backendIntegration.sendQueryToBackend === 'function') {
+                    // Process the query using backend integration
+                    const answer = await window.backendIntegration.sendQueryToBackend(messageText, pdfText);
+                    
+                    // Remove typing indicator (for redundancy, in case it wasn't already removed)
+                    if (typingIndicator.parentNode) {
+                        typingIndicator.parentNode.removeChild(typingIndicator);
+                    }
+                    
+                    // Calculate a more natural typing delay based on response length
+                    const typingDelay = Math.min(Math.max(500, answer.length * 2), 3000);
+                    
+                    // Add AI response to chat after a typing delay
+                    setTimeout(() => {
+                        addMessageToChat(answer, 'ai');
+                    }, typingDelay);
+                } else {
+                    // Fall back to local simulation if backend integration is not available
+                    console.log("Backend integration not available, using local simulation");
+                    // Remove the typing indicator since simulateAiResponse creates its own
+                    if (typingIndicator.parentNode) {
+                        typingIndicator.parentNode.removeChild(typingIndicator);
+                    }
+                    // Use the local simulation function
+                    simulateAiResponse(messageText);
+                }
             } catch (error) {
                 console.error('Error processing message:', error);
+                // Remove typing indicator in case of error
+                if (typingIndicator.parentNode) {
+                    typingIndicator.parentNode.removeChild(typingIndicator);
+                }
                 addMessageToChat('Sorry, I encountered an error while processing your query.', 'ai');
             }
-        }, 1500);
+        }, 500);
 
     } catch (error) {
         console.error('Error in sendMessage:', error);
@@ -1514,335 +1689,117 @@ async function sendMessage() {
 }
 
 // Add a message to the chat
-function addMessageToChat(message, sender, messageType = '') {
-    // Process AI responses to remove repetition
-    if (sender === 'ai') {
-        message = processResponseForRepetition(message);
-    }
-    
+function addMessageToChat(message, sender = 'user', messageType = '') {
     const messageElement = document.createElement('div');
+    messageElement.className = `message ${sender}-message`;
     
-    // Set appropriate message class based on sender and messageType
     if (messageType) {
-        messageElement.className = `message ${messageType}-message`;
-    } else {
-        messageElement.className = `message ${sender}-message`;
+        messageElement.classList.add(`${messageType}-message`);
     }
     
+    // Don't add duplicate consecutive messages
+    if (chatHistory.length > 0) {
+        const lastMessage = chatHistory[chatHistory.length - 1];
+        if (lastMessage.sender === sender && lastMessage.message === message) {
+            // Skip duplicate consecutive message
+            return;
+        }
+    }
+    
+    // Create a container for the message content
     const contentElement = document.createElement('div');
     contentElement.className = 'message-content';
     
-    // Check if the message contains code blocks
-    if (message.includes('```')) {
-        // Split by code blocks first
-        const parts = message.split(/```(\w*)/);
-        
-        let inCodeBlock = false;
-        let language = '';
-        let currentText = '';
-        
-        parts.forEach((part, index) => {
-            // If this part is a language identifier
-            if (index % 2 === 1) {
-                language = part;
-                inCodeBlock = true;
-                return;
-            }
-            
-            // If we're in a code block
-            if (inCodeBlock) {
-                // Find the closing backticks
-                const endIndex = part.indexOf('```');
-                if (endIndex !== -1) {
-                    // Extract the code content
-                    const code = part.substring(0, endIndex).trim();
-                    
-                    // Create code block element
-                    const codeBlock = document.createElement('div');
-                    codeBlock.className = 'code-block';
-                    
-                    // Add language label if available
-                    if (language) {
-                        const langLabel = document.createElement('div');
-                        langLabel.className = 'code-language';
-                        langLabel.textContent = language;
-                        codeBlock.appendChild(langLabel);
-                    }
-                    
-                    // Create pre and code elements for proper formatting
-                    const pre = document.createElement('pre');
-                    const codeElem = document.createElement('code');
-                    if (language) {
-                        codeElem.className = `language-${language}`;
-                    }
-                    codeElem.textContent = code;
-                    pre.appendChild(codeElem);
-                    codeBlock.appendChild(pre);
-                    
-                    // Add buttons for copy and run (if applicable)
-                    const buttonContainer = document.createElement('div');
-                    buttonContainer.className = 'code-buttons';
-                    
-                    const copyButton = document.createElement('button');
-                    copyButton.className = 'code-btn copy-btn';
-                    copyButton.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg> Copy';
-                    copyButton.addEventListener('click', function() {
-                        navigator.clipboard.writeText(code).then(() => {
-                            copyButton.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg> Copied!';
-                            setTimeout(() => {
-                                copyButton.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg> Copy';
-                            }, 2000);
-                        });
-                    });
-                    buttonContainer.appendChild(copyButton);
-                    codeBlock.appendChild(buttonContainer);
-                    
-                    // Add the code block to content
-                    contentElement.appendChild(codeBlock);
-                    
-                    // Process any remaining text after the code block
-                    if (endIndex + 3 < part.length) {
-                        currentText = part.substring(endIndex + 3);
-                    } else {
-                        currentText = '';
-                    }
-                    
-                    inCodeBlock = false;
-                }
-            } else {
-                // For regular text content
-                currentText = part;
-            }
-            
-            // Process any accumulated regular text
-            if (currentText.trim()) {
-                // Process the message for proper formatting
-                // First replace any double newlines with a special marker to preserve paragraph breaks
-                const formattedText = currentText.replace(/\n\n+/g, '||PARAGRAPH||');
-                
-                // Then handle single newlines
-                const withLineBreaks = formattedText.replace(/\n/g, '||LINEBREAK||');
-                
-                // Split by paragraph marker
-                const paragraphs = withLineBreaks.split('||PARAGRAPH||');
-                
-                paragraphs.forEach(paragraph => {
-                    if (paragraph.trim()) {
-                        // For each paragraph, create a separate element
-                        const p = document.createElement('p');
-                        
-                        // Check if this is a heading
-                        if (paragraph.trim().match(/^(#+)\s+(.+)$/)) {
-                            const headingMatch = paragraph.trim().match(/^(#+)\s+(.+)$/);
-                            const headingLevel = Math.min(headingMatch[1].length, 6);
-                            // Remove any LINEBREAK markers from the heading text
-                            const cleanHeadingText = headingMatch[2].replace(/\|\|LINEBREAK\|\|/g, ' ').trim();
-                            
-                            // Create heading element with bold styling but without ## markers
-                            const heading = document.createElement('span');
-                            heading.className = 'clean-heading';
-                            heading.innerHTML = `<strong>${cleanHeadingText}</strong>`;
-                            
-                            // Add line break before the heading instead of after
-                            contentElement.appendChild(document.createElement('br'));
-                            contentElement.appendChild(heading);
-                            
-                            // Create a text node for the next content
-                            const nextContentSpan = document.createElement('div');
-                            nextContentSpan.className = 'post-heading-content';
-                            contentElement.appendChild(nextContentSpan);
-                            return;
-                        }
-                        
-                        // Check if this is a section like "✅ Explanation:"
-                        if (paragraph.trim().startsWith('✅')) {
-                            p.className = 'explanation-section';
-                        }
-                        
-                        // Handle line breaks within paragraphs
-                        if (paragraph.includes('||LINEBREAK||')) {
-                            const lines = paragraph.split('||LINEBREAK||');
-                            
-                            // Check if this appears to be a list
-                            if (lines.some(line => line.trim().match(/^(\d+\.|\-|\•|\*)\s+/))) {
-                                // Create a list element
-                                const isList = lines[0].trim().match(/^(\d+\.)\s+/) ? 'ol' : 'ul';
-                                const list = document.createElement(isList);
-                                
-                                lines.forEach(line => {
-                                    const trimmedLine = line.trim();
-                                    if (trimmedLine) {
-                                        // Remove the list marker
-                                        const listContent = trimmedLine.replace(/^(\d+\.|\-|\•|\*)\s+/, '');
-                                        const li = document.createElement('li');
-                                        // Make list items that start with descriptive terms bold
-                                        if (listContent.match(/^[A-Za-z\s]+(:|\.)/)) {
-                                            const match = listContent.match(/^([A-Za-z\s]+)(:|\.)/);
-                                            if (match) {
-                                                li.innerHTML = `<strong>${match[1]}${match[2]}</strong> ${listContent.substring(match[0].length)}`;
-                                            } else {
-                                        li.textContent = listContent;
-                                            }
-                                        } else {
-                                            li.textContent = listContent;
-                                        }
-                                        list.appendChild(li);
-                                    }
-                                });
-                                
-                                contentElement.appendChild(list);
-                            } else {
-                                // Regular paragraph with line breaks
-                                p.innerHTML = lines
-                                    .map(line => {
-                                        let processedLine = line.trim().replace(/^\s*\*\s+/g, '');
-                                        
-                                        // Check if this line looks like a heading (starts with ## or ###)
-                                        if (processedLine.match(/^#+\s+(.+)$/)) {
-                                            const headingMatch = processedLine.match(/^#+\s+(.+)$/);
-                                            const headingText = headingMatch[1].trim();
-                                            return `<br><br><span class="inline-heading"><strong>${headingText}</strong></span><div class="post-heading-content"></div>`;
-                                        }
-                                        
-                                        // Bold descriptive phrases (like "Key Points:", "Overview:", etc.)
-                                        return processedLine.replace(/^([A-Za-z\s]+:)(\s|$)/g, '<br><br><strong>$1</strong>$2<div class="post-heading-content"></div>');
-                                    })
-                                    .filter(line => line.length > 0)
-                                    .join('<br>');
-                                contentElement.appendChild(p);
-                            }
-                        } else {
-                            // Regular paragraph - check for descriptive phrases to make bold
-                            const trimmedText = paragraph.trim().replace(/^\s*\*\s+/g, '');
-                            if (trimmedText.match(/^([A-Za-z\s]+:)(\s|$)/)) {
-                                p.innerHTML = trimmedText.replace(/^([A-Za-z\s]+:)(\s|$)/g, '<br><br><strong>$1</strong>$2<div class="post-heading-content"></div>');
-                            } else {
-                                p.textContent = trimmedText;
-                            }
-                            contentElement.appendChild(p);
-                        }
-                    }
-                });
-            }
-        });
-    } else {
-        // Process regular messages (no code blocks)
-        // First replace any double newlines with a special marker to preserve paragraph breaks
-        const formattedMessage = message.replace(/\n\n+/g, '||PARAGRAPH||');
-        
-        // Then handle single newlines
-        const withLineBreaks = formattedMessage.replace(/\n/g, '||LINEBREAK||');
-        
-        // Split by paragraph marker
-        const paragraphs = withLineBreaks.split('||PARAGRAPH||');
-        
-        paragraphs.forEach(paragraph => {
-            if (paragraph.trim()) {
-                // For each paragraph, create a separate element
-                const p = document.createElement('p');
-                
-                // Check if this is a heading
-                if (paragraph.trim().match(/^(#+)\s+(.+)$/)) {
-                    const headingMatch = paragraph.trim().match(/^(#+)\s+(.+)$/);
-                    const headingLevel = Math.min(headingMatch[1].length, 6);
-                    // Remove any LINEBREAK markers from the heading text
-                    const cleanHeadingText = headingMatch[2].replace(/\|\|LINEBREAK\|\|/g, ' ').trim();
-                    
-                    // Create heading element with bold styling but without ## markers
-                    const heading = document.createElement('span');
-                    heading.className = 'clean-heading';
-                    heading.innerHTML = `<strong>${cleanHeadingText}</strong>`;
-                    
-                    // Add line break before the heading instead of after
-                    contentElement.appendChild(document.createElement('br'));
-                    contentElement.appendChild(heading);
-                    
-                    // Create a text node for the next content
-                    const nextContentSpan = document.createElement('div');
-                    nextContentSpan.className = 'post-heading-content';
-                    contentElement.appendChild(nextContentSpan);
-                    return;
-                }
-                
-                // Handle line breaks within paragraphs
-                if (paragraph.includes('||LINEBREAK||')) {
-                    const lines = paragraph.split('||LINEBREAK||');
-                    
-                    // Check if this appears to be a list
-                    if (lines.some(line => line.trim().match(/^(\d+\.|\-|\•|\*)\s+/))) {
-                        // Create a list element
-                        const isList = lines[0].trim().match(/^(\d+\.)\s+/) ? 'ol' : 'ul';
-                        const list = document.createElement(isList);
-                        
-                        lines.forEach(line => {
-                            const trimmedLine = line.trim();
-                            if (trimmedLine) {
-                                // Remove the list marker
-                                const listContent = trimmedLine.replace(/^(\d+\.|\-|\•|\*)\s+/, '');
-                                const li = document.createElement('li');
-                                // Make list items that start with descriptive terms bold
-                                if (listContent.match(/^[A-Za-z\s]+(:|\.)/)) {
-                                    const match = listContent.match(/^([A-Za-z\s]+)(:|\.)/);
-                                    if (match) {
-                                        li.innerHTML = `<strong>${match[1]}${match[2]}</strong> ${listContent.substring(match[0].length)}`;
-                                    } else {
-                                li.textContent = listContent;
-                                    }
-                                } else {
-                                    li.textContent = listContent;
-                                }
-                                list.appendChild(li);
-                            }
-                        });
-                        
-                        contentElement.appendChild(list);
-                    } else {
-                        // Regular paragraph with line breaks
-                        p.innerHTML = lines
-                            .map(line => {
-                                let processedLine = line.trim().replace(/^\s*\*\s+/g, '');
-                                
-                                // Check if this line looks like a heading (starts with ## or ###)
-                                if (processedLine.match(/^#+\s+(.+)$/)) {
-                                    const headingMatch = processedLine.match(/^#+\s+(.+)$/);
-                                    const headingText = headingMatch[1].trim();
-                                    return `<br><br><span class="inline-heading"><strong>${headingText}</strong></span><div class="post-heading-content"></div>`;
-                                }
-                                
-                                // Bold descriptive phrases (like "Key Points:", "Overview:", etc.)
-                                return processedLine.replace(/^([A-Za-z\s]+:)(\s|$)/g, '<br><br><strong>$1</strong>$2<div class="post-heading-content"></div>');
-                            })
-                            .filter(line => line.length > 0)
-                            .join('<br>');
-                        contentElement.appendChild(p);
-                    }
-                } else {
-                    // Regular paragraph - check for descriptive phrases to make bold
-                    const trimmedText = paragraph.trim().replace(/^\s*\*\s+/g, '');
-                    if (trimmedText.match(/^([A-Za-z\s]+:)(\s|$)/)) {
-                        p.innerHTML = trimmedText.replace(/^([A-Za-z\s]+:)(\s|$)/g, '<br><br><strong>$1</strong>$2<div class="post-heading-content"></div>');
-                    } else {
-                        p.textContent = trimmedText;
-                    }
-                    contentElement.appendChild(p);
-                }
-            }
-        });
-    }
+    // Process and display the message
+    displayMessage(message, sender, contentElement);
     
+    // Add the message content to the message element
     messageElement.appendChild(contentElement);
+    
+    // Add the message to the chat
     chatMessages.appendChild(messageElement);
     
-    // Scroll to bottom
+    // Scroll to the bottom
     chatMessages.scrollTop = chatMessages.scrollHeight;
     
-    // Add to chat history
+    // Save to chat history
     chatHistory.push({ 
         sender, 
         message,
         messageType,
         timestamp: new Date().toISOString() 
     });
+}
+
+// Function to display message content - handles formatting
+function displayMessage(message, sender, container) {
+    console.log("Displaying message:", message);
+    
+    if (typeof message === 'string') {
+        // Enhanced formatting based on message sender
+        if (sender === 'user') {
+            // Simple formatting for user messages
+            const formattedMessage = message.replace(/\n/g, '<br>');
+            container.innerHTML = `<p>${formattedMessage}</p>`;
+        } else if (sender === 'ai' || sender === 'system') {
+            // Enhanced formatting for AI messages
+            let formattedMessage = message;
+            
+            // Basic markdown formatting
+            // Convert headers (##, ###, etc.)
+            formattedMessage = formattedMessage.replace(/^### (.*?)$/gm, '<h3 class="message-heading">$1</h3>');
+            formattedMessage = formattedMessage.replace(/^## (.*?)$/gm, '<h2 class="message-heading">$1</h2>');
+            formattedMessage = formattedMessage.replace(/^# (.*?)$/gm, '<h1 class="message-heading">$1</h1>');
+            
+            // Convert bold (**text**)
+            formattedMessage = formattedMessage.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+            
+            // Convert italic (*text*)
+            formattedMessage = formattedMessage.replace(/\*(.*?)\*/g, '<em>$1</em>');
+            
+            // Convert bullet points
+            formattedMessage = formattedMessage.replace(/^- (.*?)$/gm, '<li class="bullet-item">$1</li>');
+            formattedMessage = formattedMessage.replace(/(<li.*?>.*?<\/li>)\s*(<li.*?>)/g, '$1$2');
+            formattedMessage = formattedMessage.replace(/(<li.*?>.*?<\/li>)+/g, '<ul class="message-bullet-list">$&</ul>');
+            
+            // Convert numbered lists
+            formattedMessage = formattedMessage.replace(/^\d+\. (.*?)$/gm, '<li class="numbered-item">$1</li>');
+            formattedMessage = formattedMessage.replace(/(<li class="numbered-item".*?>.*?<\/li>)\s*(<li class="numbered-item".*?>)/g, '$1$2');
+            formattedMessage = formattedMessage.replace(/(<li class="numbered-item".*?>.*?<\/li>)+/g, '<ol class="message-numbered-list">$&</ol>');
+            
+            // Handle code blocks with syntax highlighting
+            formattedMessage = formattedMessage.replace(/```(.*?)\n([\s\S]*?)```/g, function(match, language, code) {
+                return `<pre class="code-block${language ? ' language-' + language : ''}"><code>${code.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</code></pre>`;
+            });
+            
+            // Handle inline code
+            formattedMessage = formattedMessage.replace(/`(.*?)`/g, '<code>$1</code>');
+            
+            // Wrap plain text paragraphs (text not already wrapped in HTML tags)
+            formattedMessage = formattedMessage.replace(/^(?!<[a-z][a-z0-9]*>)(.+?)(?!<\/[a-z][a-z0-9]*>)$/gm, '<p class="regular-paragraph">$1</p>');
+            
+            // Convert newlines to <br> for any remaining text
+            formattedMessage = formattedMessage.replace(/\n/g, '<br>');
+            
+            // Set the formatted content
+            container.innerHTML = formattedMessage;
+            
+            // Add special styling to AI response if needed
+            if (sender === 'ai') {
+                container.classList.add('ai-content');
+            } else if (sender === 'system') {
+                container.classList.add('system-content');
+            }
+        } else {
+            // Default formatting for other message types
+            const formattedMessage = message.replace(/\n/g, '<br>');
+            container.innerHTML = `<p>${formattedMessage}</p>`;
+        }
+    } else {
+        // Fallback for non-string input
+        container.innerHTML = `<p>Error displaying message</p>`;
+        console.error("Invalid message format:", message);
+    }
 }
 
 // Simulate AI response
@@ -1872,38 +1829,22 @@ function simulateAiResponse(userMessage) {
         if (userMessage.toLowerCase().includes('hello') || userMessage.toLowerCase().includes('hi')) {
             response = "Hello! I'm your QuPDF assistant. How can I help you with this document today?";
         } else if (userMessage.toLowerCase().includes('help')) {
-            response = "I can help you understand the content of your PDF. With QuPDF, you can ask me questions about specific pages, search for information, or request summaries of sections.";
+            response = "# QuPDF Help Guide\n\nI can help you understand the content of your PDF. With QuPDF, you can:\n\n- Ask questions about specific pages\n- Search for information within the document\n- Request summaries of sections\n- Use highlighting tools to mark important parts\n\nWhat would you like help with today?";
         } else if (userMessage.toLowerCase().includes('thank')) {
             response = "You're welcome! If you have any more questions about your document, feel free to ask. QuPDF is here to help you make the most of your PDFs.";
             messageType = 'success';
         } else if (userMessage.toLowerCase().includes('error') || userMessage.toLowerCase().includes('problem') || userMessage.toLowerCase().includes('issue')) {
-            response = "I notice you're mentioning an issue. If you're having problems with the PDF display, try using the zoom controls or navigating to a different page. If problems persist, please refresh the page. QuPDF is designed to provide a smooth experience with your documents.";
+            response = "## Troubleshooting Guide\n\nI notice you're mentioning an issue. Here are some common solutions:\n\n1. **PDF Display Issues**: Try using the zoom controls or navigating to a different page\n2. **Search Problems**: Ensure your search term is correctly spelled\n3. **Slow Performance**: Large PDFs may take longer to process\n\nIf problems persist, please refresh the page. QuPDF is designed to provide a smooth experience with your documents.";
             messageType = 'warning';
         } else if (userMessage.toLowerCase().includes('not working') || userMessage.toLowerCase().includes('broken')) {
             response = "I'm sorry to hear something isn't working properly with QuPDF. Could you provide more details about the problem so I can try to help you resolve it?";
             messageType = 'error';
         } else if (userMessage.toLowerCase().includes('zoom')) {
-            response = "You can use the zoom controls in the QuPDF toolbar above the document. Click the + button to zoom in, the - button to zoom out, or the reset button to return to the default zoom level.";
-        } else if (userMessage.toLowerCase().includes('navigate') || userMessage.toLowerCase().includes('page')) {
-            response = "To navigate between pages in QuPDF, use the previous and next buttons in the toolbar. You can also see your current page number and the total number of pages displayed in the center.";
-        } else if (userMessage.toLowerCase().includes('search')) {
-            response = "QuPDF makes it easy to search for text in your document. Use the search box in the toolbar - just type your search term and press Enter or click the search icon to find matches within the document.";
-        } else if (userMessage.toLowerCase().includes('highlight')) {
-            response = "To highlight text in QuPDF, click the highlight button in the toolbar, then select the text you want to highlight in the PDF. Click the highlight button again to exit highlight mode.";
-        } else if (userMessage.toLowerCase().includes('download')) {
-            response = "You can download the PDF by clicking the download button in the QuPDF toolbar. This will save the current PDF to your device.";
-        } else if (userMessage.toLowerCase().includes('share') || userMessage.toLowerCase().includes('export')) {
-            response = "With QuPDF, you can export this chat using the export button at the top of the chat panel. The export button lets you download the chat as a text file.";
-            messageType = 'system';
-        } else if (userMessage.toLowerCase().includes('clear') || userMessage.includes('delete')) {
-            response = "You can clear the chat history by clicking the trash icon at the top of the QuPDF chat panel. This will remove all messages and start a new conversation.";
-            messageType = 'system';
-        } else if (userMessage.toLowerCase().includes('what') && userMessage.toLowerCase().includes('qupdf')) {
-            response = "QuPDF is a powerful PDF viewer and AI chat assistant that helps you interact with your documents intelligently. You can chat with me about document content, search, highlight, and extract information easily from your PDFs.";
+            response = "### Using Zoom Controls\n\nYou can use the zoom controls in the QuPDF toolbar above the document:\n- Click the **+** button to zoom in\n- Click the **-** button to zoom out\n- Click the reset button to return to the default zoom level";
         } else if (userMessage.toLowerCase().includes('features') || userMessage.toLowerCase().includes('can you do')) {
-            response = "QuPDF offers several powerful features: document chat to answer your questions about PDF content, easy navigation, text search, highlighting, document summaries, and the ability to export your conversations. What would you like to explore first?";
+            response = "# QuPDF Features\n\nQuPDF offers several powerful features:\n\n## Document Interaction\n- **Intelligent Chat**: Ask questions about your PDF content\n- **Easy Navigation**: Move between pages seamlessly\n- **Text Search**: Find specific information quickly\n\n## Advanced Features\n- **Highlighting**: Mark important sections of text\n- **Document Summaries**: Get quick overviews of content\n- **Export Conversations**: Save your chat for future reference\n\nWhat would you like to explore first?";
         } else {
-            response = "I've analyzed the document using QuPDF's intelligent processing and found relevant information related to your question. The document discusses this topic in detail, particularly on pages 2-3 where key concepts are explained. Would you like me to elaborate on any specific aspect?";
+            response = "## Document Analysis\n\nI've analyzed the document using QuPDF's intelligent processing and found relevant information related to your question. The document discusses this topic in detail, particularly on pages 2-3 where key concepts are explained.\n\n```\nSample code or important text might appear here in a formatted block\n```\n\nWould you like me to elaborate on any specific aspect?";
         }
         
         // Calculate a more natural typing delay based on response length
@@ -2220,7 +2161,7 @@ function addCustomStyles() {
         }
         .clean-heading strong {
             font-weight: bold;
-            color: #0066cc;
+            color: #776cff;
             font-size: 18px;
             display: inline;
             line-height: 1.4;
@@ -2239,7 +2180,7 @@ function addCustomStyles() {
             margin-bottom: 25px;
         }
         .inline-heading strong {
-            color: #0066cc;
+            color: #776cff;
             font-size: 16px;
             display: inline;
         }

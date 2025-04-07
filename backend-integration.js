@@ -16,7 +16,6 @@ function getCurrentApiKey() {
 function switchToAlternateKey() {
     useAlternateKey = true;
     console.log('Switching to alternate Gemini API key');
-    showNotification('Switching to alternate API key', 'info');
     return ALTERNATE_GEMINI_API_KEY;
 }
 
@@ -28,6 +27,21 @@ function showNotification(message, type = 'info') {
     } else {
         // Fallback to console
         console.log(`${type.toUpperCase()}: ${message}`);
+    }
+}
+
+// Helper function to read PDF file content
+async function readPdfFile(pdfFile) {
+    try {
+        if (pdfFile instanceof Blob || pdfFile instanceof File) {
+            return await pdfFile.arrayBuffer();
+        } else {
+            console.error('Invalid PDF file format', pdfFile);
+            throw new Error('Invalid PDF file format');
+        }
+    } catch (error) {
+        console.error('Error reading PDF file:', error);
+        throw error;
     }
 }
 
@@ -116,28 +130,23 @@ async function sendQueryToBackend(query, pdfText) {
 // Function to process PDF with Gemini API directly from frontend
 async function processWithGeminiAPI(pdfFile) {
     try {
-        // Extract text from PDF using pdf.js
-        const pdfData = await pdfFile.arrayBuffer();
-        const pdf = await pdfjsLib.getDocument({ data: pdfData }).promise;
+        const pdfData = await readPdfFile(pdfFile);
+        const pdf = await pdfjsLib.getDocument({data: pdfData}).promise;
         
         let pdfText = '';
-        // Show notification
-        showNotification('Extracting text from PDF...', 'info');
         
         // Get total number of pages
         const totalPages = pdf.numPages;
         
-        // Extract text from each page
+        // Extract text from each page silently - don't create UI elements
+        // as that's now handled by the pdf-viewer.js
         for (let i = 1; i <= totalPages; i++) {
-            showNotification(`Processing page ${i} of ${totalPages}...`, 'info');
             const page = await pdf.getPage(i);
             const textContent = await page.getTextContent();
             pdfText += textContent.items.map(item => item.str).join(' ');
         }
         
-        // Get summary using Gemini API
-        showNotification('Generating summary...', 'info');
-        
+        // Generate summary silently - don't update UI directly here
         const summaryPrompt = `Please analyze the following PDF text and provide:
 1. An ultra-concise summary (25-50 words maximum) that captures the essence of the document
 2. 4 very short key points (5-10 words each) from the document
@@ -259,15 +268,13 @@ ${pdfText.substring(0, 15000)}... (truncated for length)`;
             '\n\nKey Points:\n' + keyPoints.map(point => point).join('\n') : 
             '');
         
-        showNotification('Summary generated successfully!', 'success');
-        
+        // Return the processed data - UI updates happen in pdf-viewer.js
         return {
             summary: formattedSummary,
             keyPoints: keyPoints
         };
     } catch (error) {
         console.error('Error processing with Gemini API:', error);
-        showNotification(`Error: ${error.message}`, 'error');
         return mockProcessPDF(pdfFile);
     }
 }
@@ -426,129 +433,28 @@ function postProcessApiResponse(response) {
     return resultText;
 }
 
-// Function to query Gemini API directly from frontend
-async function queryWithGeminiAPI(query, pdfText) {
-    try {
-        showNotification('Processing your question...', 'info');
-        
-        // Create a prompt for Gemini API with detailed formatting instructions
-        const prompt = `I have a PDF document with the following text. Please answer the question based only on the information in this document.
-
-Document text:
-${pdfText.substring(0, 15000)}... (truncated for length)
-
-Question: ${query}
-
-FORMATTING INSTRUCTIONS - FOLLOW THESE EXACTLY:
-1. If the document only briefly mentions the topic without providing a substantial explanation, respond with: "This document only briefly mentions the topic without providing a detailed explanation. Here's what you should know:" Then add a line break before starting your explanation.
-
-2. FORMAT YOUR RESPONSE PROPERLY:
-   - Keep responses concise (under 100 words per section)
-   - Use clear headings (## for main headings, ### for subheadings)
-   - Use bullet points where appropriate (preceded by a blank line)
-   - Separate sections with new lines for readability
-   - Highlight key terms in **bold** when needed
-   - NEVER use asterisks (*) or bullet points at the beginning of any line without spacing
-   - IMPORTANT: DO NOT REPEAT the same content, explanations, or phrases multiple times in the response
-
-3. STRUCTURE YOUR RESPONSE WITH:
-   - ONE clear introductory paragraph (don't repeat introductions)
-   - Well-spaced, organized sections (without repetition)
-   - Properly indented code blocks (if applicable)
-   - AVOID explaining the same concept multiple times in different sections
-
-4. For programming-related questions:
-   - IMPORTANT: Provide code examples for the SPECIFIC programming language mentioned in the query (e.g., JavaScript, Python, Java, C++, etc.)
-   - Use proper formatting with triple backticks and language name (e.g., \`\`\`javascript)
-   - Include multiple approaches/methods when relevant
-   - Add brief explanatory text after each code example
-   - Show expected output where helpful
-   - NEVER repeat the same code example or explanation twice
-   
-5. EXAMPLE RESPONSE FORMAT:
-   ## Main Topic
-   Brief explanation of the main concept.
-   
-   ### Subtopic
-   Additional details about a specific aspect.
-   
-   Key Points:
-   - First important point
-   - Second important point
-   
-   \`\`\`javascript
-   // Code example if relevant
-   function example() {
-       return "result";
-   }
-   \`\`\`
-
-Your answer (ensure concise, well-formatted response without repetition):`;
-
-        let currentKey = getCurrentApiKey();
-        let response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent?key=${currentKey}`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                contents: [{
-                    parts: [{
-                        text: prompt
-                    }]
-                }],
-                generationConfig: {
-                    temperature: 0.2,
-                    topP: 0.8,
-                    topK: 40
-                }
-            })
-        });
-
-        // If we get a 429 (rate limit exceeded) or other API error and we haven't tried the alternate key yet
-        if (!response.ok && !useAlternateKey) {
-            const errorData = await response.json();
-            console.error('Gemini API error with primary key:', errorData);
-            
-            // Switch to the alternate key and retry
-            currentKey = switchToAlternateKey();
-            
-            response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent?key=${currentKey}`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    contents: [{
-                        parts: [{
-                            text: prompt
-                        }]
-                    }],
-                    generationConfig: {
-                        temperature: 0.2,
-                        topP: 0.8,
-                        topK: 40
-                    }
-                })
-            });
-        }
-
-        if (!response.ok) {
-            const errorData = await response.json();
-            console.error('Gemini API error:', errorData);
-            throw new Error(`Gemini API error: ${errorData.error?.message || 'Unknown error'}`);
-        }
-
-        const data = await response.json();
-        const rawResponse = data.candidates[0].content.parts[0].text;
-        
-        // Post-process the response to remove repetitive content
-        return postProcessApiResponse(rawResponse);
-    } catch (error) {
-        console.error('Error querying with Gemini API:', error);
-        showNotification(`Error: ${error.message}`, 'error');
-        return mockQueryResponse(query, pdfText);
-    }
+// Function to clean up headings and ensure they don't have bullet points
+function cleanupHeadings(text) {
+    // First, convert all ### headings to ## for consistent heading level
+    let processedText = text.replace(/(^|\n)###\s+/gm, '$1## ');
+    
+    // Remove any bullet points from headings (but preserve bullet points in regular text)
+    processedText = processedText.replace(/(^|\n)(##)\s*[-*•]\s+/gm, '$1$2 ');
+    
+    // Next, ensure there's a newline before headings (except at the very beginning of the text)
+    processedText = processedText.replace(/([^\n])\n(##\s+)/g, '$1\n\n$2');
+    
+    // Make sure all regular paragraphs that aren't headings or bullet points get bullet points
+    // This regex looks for lines that don't start with ## or bullet point markers
+    processedText = processedText.replace(/(^|\n)(?!(##\s+|[-*•]\s+))([^\n]+)/gm, '$1- $3');
+    
+    // Fix any cases where we might have accidentally doubled bullet points
+    processedText = processedText.replace(/(^|\n)-\s+[-*•]\s+/gm, '$1- ');
+    
+    // Add extra spacing after sections (look for bullet points followed by headings)
+    processedText = processedText.replace(/(^|\n)([-*•][^\n]+)(\n+)(##)/gm, '$1$2\n\n$4');
+    
+    return processedText;
 }
 
 // Mock functions for testing without a backend
@@ -1188,6 +1094,145 @@ These are just a few of the many data structures used in programming. Each has i
         return detailedResponses.limitations;
     } else {
         return detailedResponses.default;
+    }
+}
+
+// Function to query Gemini API directly from frontend
+async function queryWithGeminiAPI(query, pdfText) {
+    try {
+        // Note: typing indicator is now managed by the pdf-viewer.js
+        // We just process the query here
+        
+        // Create a prompt for Gemini API with detailed formatting instructions
+        const prompt = `I have a PDF document with the following text. Please answer the question based only on the information in this document.
+
+Document text:
+${pdfText.substring(0, 15000)}... (truncated for length)
+
+Question: ${query}
+
+FORMATTING INSTRUCTIONS - FOLLOW THESE EXACTLY:
+1. If the document only briefly mentions the topic without providing a substantial explanation, respond with: "This document only briefly mentions the topic without providing a detailed explanation. Here's what you should know:" Then add a line break before starting your explanation.
+
+2. FORMAT YOUR RESPONSE PROPERLY:
+   - Format each information point as a bullet point (- ) EXCEPT for headings
+   - Headings should be plain text prefixed with ## (no bullet points)
+   - All headings should be treated with equal importance using ## (don't use ### for subheadings)
+   - Add a blank line BEFORE each heading
+   - After each heading section (a heading and its bullet points), add an extra blank line
+   - Keep responses concise (under 100 words per section)
+   - Use clear headings for different topics/sections
+   - DO NOT use bullet points or asterisks (*) in headings
+   - Separate sections with new lines for readability
+   - Highlight key terms in **bold** when needed within bullet points
+   - IMPORTANT: DO NOT REPEAT the same content, explanations, or phrases multiple times in the response
+
+3. STRUCTURE YOUR RESPONSE WITH:
+   - ONE clear introductory bullet point to start
+   - Well-spaced, organized sections (with blank lines before headings)
+   - Every paragraph of content except headings should be formatted as a bullet point
+   - Add a blank line after each main section before starting a new heading
+   - Code blocks should appear after a bullet point
+   - AVOID explaining the same concept multiple times in different sections
+
+4. For programming-related questions:
+   - IMPORTANT: Provide code examples for the SPECIFIC programming language mentioned in the query (e.g., JavaScript, Python, Java, C++, etc.)
+   - Use proper formatting with triple backticks and language name (e.g., \`\`\`javascript)
+   - Include multiple approaches/methods when relevant
+   - Add brief explanatory text as bullet points after each code example
+   - Show expected output where helpful
+   - NEVER repeat the same code example or explanation twice
+   
+5. EXAMPLE RESPONSE FORMAT:
+   - This is an introductory paragraph that explains the main concept briefly as a bullet point.
+
+   ## First Main Topic
+   - First point about the main topic with explanation.
+   - Second important point with **key terms** highlighted.
+   - Third point providing additional details.
+
+   ## Second Main Topic
+   - Additional details about a specific aspect.
+   - Another bullet point with more information.
+   
+   \`\`\`javascript
+   // Code example if relevant
+   function example() {
+       return "result";
+   }
+   \`\`\`
+   
+   - Explanation of what the code does as a bullet point.
+
+Your answer (ensure all text except headings is formatted as bullet points, and use ## for all headings):`;
+
+        let currentKey = getCurrentApiKey();
+        let response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent?key=${currentKey}`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                contents: [{
+                    parts: [{
+                        text: prompt
+                    }]
+                }],
+                generationConfig: {
+                    temperature: 0.2,
+                    topP: 0.8,
+                    topK: 40
+                }
+            })
+        });
+
+        // If we get a 429 (rate limit exceeded) or other API error and we haven't tried the alternate key yet
+        if (!response.ok && !useAlternateKey) {
+            const errorData = await response.json();
+            console.error('Gemini API error with primary key:', errorData);
+            
+            // Switch to the alternate key and retry
+            currentKey = switchToAlternateKey();
+            
+            response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent?key=${currentKey}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    contents: [{
+                        parts: [{
+                            text: prompt
+                        }]
+                    }],
+                    generationConfig: {
+                        temperature: 0.2,
+                        topP: 0.8,
+                        topK: 40
+                    }
+                })
+            });
+        }
+
+        if (!response.ok) {
+            const errorData = await response.json();
+            console.error('Gemini API error:', errorData);
+            throw new Error(`Gemini API error: ${errorData.error?.message || 'Unknown error'}`);
+        }
+
+        const data = await response.json();
+        const rawResponse = data.candidates[0].content.parts[0].text;
+        
+        // Post-process the response to remove repetitive content
+        let processedResponse = postProcessApiResponse(rawResponse);
+        
+        // Apply heading formatting to ensure blank lines before headings
+        processedResponse = cleanupHeadings(processedResponse);
+        
+        return processedResponse;
+    } catch (error) {
+        console.error('Error querying with Gemini API:', error);
+        return mockQueryResponse(query, pdfText);
     }
 }
 

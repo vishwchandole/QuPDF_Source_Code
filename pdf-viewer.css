@@ -106,7 +106,7 @@ body {
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    max-width: 500px;
+    max-width: 300px;
     position: relative;
     padding-left: 15px;
 }
@@ -695,21 +695,22 @@ body {
     z-index: 0;
 }
 
-/* Chat messages container with enhanced styling */
+/* Chat messages container */
 .chat-messages {
     flex: 1;
     padding: 20px;
     overflow-y: auto;
     display: flex;
     flex-direction: column;
-    gap: 20px;
-    background-color: #fafafa;
-    height: calc(100vh - 210px);
+    gap: 15px;
+    background-color: white;
+    height: calc(100vh - 210px); /* Account for toolbar and input area */
     scrollbar-width: thin;
     scrollbar-color: var(--pdf-primary) #f5f5f5;
-    background-image: 
-        radial-gradient(circle at 90% 10%, rgba(119, 108, 255, 0.03) 0%, transparent 20%),
-        radial-gradient(circle at 10% 90%, rgba(72, 149, 239, 0.03) 0%, transparent 20%);
+    position: relative;
+    z-index: 1;
+    box-sizing: border-box;
+    align-items: stretch; /* Help with message alignment */
 }
 
 /* Scrollbar styles for chat messages */
@@ -732,10 +733,19 @@ body {
 
 /* Message styling with enhanced animations and effects */
 .message {
-    max-width: 80%;
-    margin: 12px 0;
-    animation: messageSlide 0.3s ease-out;
     position: relative;
+    border-radius: var(--border-radius-md);
+    padding: 15px 20px;
+    margin: 10px 0;
+    max-width: 85%; /* Reduced from 95% to make messages narrower */
+    font-size: 16px;
+    line-height: 1.6;
+    animation: messageSlide 0.3s forwards;
+    box-shadow: var(--box-shadow-light);
+    overflow-wrap: break-word;
+    word-break: break-word;
+    display: block; /* Ensure messages are displayed as blocks */
+    z-index: 2;
 }
 
 @keyframes messageSlide {
@@ -751,19 +761,24 @@ body {
 
 /* User messages with gradient and effects */
 .user-message {
-    margin-left: auto;
-    background: var(--pdf-primary);
+    background: var(--chat-user-bg);
     color: white;
-    border-radius: 16px 16px 0 16px;
+    align-self: flex-end;
+    border-top-right-radius: 4px;
+    font-size: 16px; /* Increased user message text size */
     padding: 12px 16px;
+    margin-left: auto; /* Push to the right side */
 }
 
 .ai-message {
-    margin-right: auto;
-    background: rgba(119, 108, 255, 0.1);
+    background-color: var(--chat-ai-bg);
     color: var(--pdf-text);
-    border-radius: 16px 16px 16px 0;
+    align-self: flex-start;
+    border-top-left-radius: 4px;
+    font-size: 16px; /* Increased AI message text size */
     padding: 12px 16px;
+    margin-right: auto; /* Push to the left side */
+    width: 80%; /* Make AI messages narrower */
 }
 
 .system-message {
@@ -772,7 +787,7 @@ body {
     color: var(--pdf-text);
     border-radius: 12px;
     padding: 12px 16px;
-    max-width: 90%;
+    max-width: 85%; /* Reduced from 90% */
     text-align: left;
 }
 
@@ -1118,45 +1133,52 @@ body {
 }
 
 .loading-spinner {
-    display: inline-block;
-    position: relative;
     width: 40px;
     height: 40px;
-    margin-bottom: 10px;
+    position: relative;
+    margin: 0 auto;
 }
 
-.loading-spinner div {
-    box-sizing: border-box;
-    display: block;
+.loading-spinner > div {
     position: absolute;
-    width: 32px;
-    height: 32px;
-    margin: 4px;
-    border: 4px solid #776CFF;
+    width: 33%;
+    height: 33%;
+    background-color: var(--pdf-primary);
     border-radius: 50%;
-    animation: loading-spinner 1.2s cubic-bezier(0.5, 0, 0.5, 1) infinite;
-    border-color: #776CFF transparent transparent transparent;
+    animation: loading-spinner 1.2s both infinite ease-in-out;
 }
 
-.loading-spinner div:nth-child(1) {
-    animation-delay: -0.45s;
-}
-
-.loading-spinner div:nth-child(2) {
-    animation-delay: -0.3s;
-}
-
-.loading-spinner div:nth-child(3) {
-    animation-delay: -0.15s;
-}
-
-.loading-spinner div:nth-child(4) {
+.loading-spinner > div:nth-child(1) {
+    top: 0;
+    left: 0;
     animation-delay: 0s;
 }
 
+.loading-spinner > div:nth-child(2) {
+    top: 0;
+    right: 0;
+    animation-delay: 0.3s;
+}
+
+.loading-spinner > div:nth-child(3) {
+    bottom: 0;
+    right: 0;
+    animation-delay: 0.6s;
+}
+
+.loading-spinner > div:nth-child(4) {
+    bottom: 0;
+    left: 0;
+    animation-delay: 0.9s;
+}
+
 @keyframes loading-spinner {
-    0% { transform: rotate(0deg); }
-    100% { transform: rotate(360deg); }
+    0%, 80%, 100% {
+        transform: scale(0);
+    }
+    40% {
+        transform: scale(1);
+    }
 }
 
 /* Update chat header title */
@@ -1400,6 +1422,10 @@ body {
     height: calc(100vh - 210px); /* Account for toolbar and input area */
     scrollbar-width: thin;
     scrollbar-color: var(--pdf-primary) #f5f5f5;
+    position: relative;
+    z-index: 1;
+    box-sizing: border-box;
+    align-items: stretch; /* Help with message alignment */
 }
 
 .chat-messages::-webkit-scrollbar {
@@ -1417,51 +1443,52 @@ body {
     border: 2px solid #f5f5f5;
 }
 
-/* Chat input styling */
+/* Chat input styling - improved for better visibility and functionality */
 .chat-input-container {
     display: flex;
-    align-items: center;
-    padding: 12px;
-    background-color: white;
+    align-items: flex-end; /* Align items to bottom for better expansion */
+    padding: 15px;
+    background-color: var(--chat-input-bg);
     border-top: 1px solid var(--pdf-border);
-    border-radius: 0 0 var(--border-radius-sm) var(--border-radius-sm);
     position: relative;
-    z-index: 1;
-    box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.02);
+    z-index: 10;
+    width: 100%;
+    box-sizing: border-box;
+    bottom: 0;
+    transition: height 0.2s ease;
 }
 
-/* Chat input */
 #chat-input {
     flex: 1;
     border: 1px solid var(--pdf-border);
-    border-radius: 20px;
-    padding: 8px 16px;
-    font-family: var(--font-Onest);
-    font-size: 14px;
-    resize: none;
-    min-height: 36px;
-    max-height: 100px;
-    height: auto;
-    outline: none;
-    transition: all 0.3s ease;
-    margin-right: 12px;
-    overflow-y: auto;
-    background-color: #fafafa;
+    border-radius: var(--border-radius-md);
+    padding: 12px 15px;
+    font-size: 16px;
+    font-family: var(--font-Onest), sans-serif;
+    background-color: var(--pdf-bg);
     color: var(--pdf-text);
-    caret-color: var(--pdf-primary);
-    box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.02);
-    line-height: 1.4;
-}
-
-#chat-input:hover {
-    border-color: rgba(119, 108, 255, 0.3);
-    background-color: white;
+    resize: none;
+    min-height: 48px;
+    max-height: 150px;
+    height: auto;
+    transition: border-color 0.3s ease, box-shadow 0.3s ease, height 0.2s ease;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
+    outline: none;
+    margin-right: 12px;
+    display: block !important; /* Force display */
+    width: calc(100% - 60px); /* Account for send button and margins */
+    overflow-y: auto; /* Allow scrolling for longer input */
+    line-height: 1.5;
 }
 
 #chat-input:focus {
     border-color: var(--pdf-primary);
-    background-color: white;
-    box-shadow: 0 0 0 3px rgba(119, 108, 255, 0.1);
+    box-shadow: 0 0 0 2px rgba(119, 108, 255, 0.2);
+}
+
+#chat-input::placeholder {
+    color: var(--pdf-text-light);
+    font-size: 16px;
 }
 
 /* Send button styling */
@@ -1469,8 +1496,8 @@ body {
     background: linear-gradient(135deg, var(--pdf-primary) 0%, var(--pdf-secondary) 100%);
     border: none;
     border-radius: 50%;
-    width: 50px;
-    height: 50px;
+    width: 48px;
+    height: 48px;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -2385,8 +2412,8 @@ body {
     }
     
     .pdf-info h1 {
-        max-width: 800px;
-        font-size: 20px;
+        max-width: 500px;
+        font-size: 18px;
     }
 }
 
@@ -2469,8 +2496,8 @@ body {
     }
     
     .pdf-info h1 {
-        font-size: 16px;
-        max-width: 200px;
+        font-size: 14px;
+        max-width: 180px;
     }
     
     .logo img {
@@ -2566,8 +2593,8 @@ body {
     }
     
     .pdf-info h1 {
-        font-size: 14px;
-        max-width: 150px;
+        font-size: 12px;
+        max-width: 120px;
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
@@ -2794,4 +2821,351 @@ body {
         width: 8px;
         height: 8px;
     }
-} 
+}
+
+/* Loading dots animation for processing messages */
+.loading-dots {
+    display: inline-block;
+}
+
+.loading-dots span {
+    display: inline-block;
+    animation: loadingDots 1.4s infinite ease-in-out;
+    animation-fill-mode: both;
+}
+
+.loading-dots span:nth-child(1) {
+    animation-delay: 0s;
+}
+
+.loading-dots span:nth-child(2) {
+    animation-delay: 0.2s;
+}
+
+.loading-dots span:nth-child(3) {
+    animation-delay: 0.4s;
+}
+
+@keyframes loadingDots {
+    0%, 80%, 100% {
+        transform: scale(0);
+        opacity: 0;
+    }
+    40% {
+        transform: scale(1);
+        opacity: 1;
+    }
+}
+
+/* Processing message styling */
+.processing-message {
+    background-color: rgba(var(--pdf-primary-rgb), 0.1);
+    border-left: 3px solid var(--pdf-primary);
+    margin-bottom: 10px;
+}
+
+.processing-message p {
+    display: flex;
+    align-items: center;
+    font-weight: 500;
+}
+
+/* Dark theme support */
+[data-theme="dark"] .processing-message {
+    background-color: rgba(var(--pdf-primary-rgb), 0.2);
+}
+
+/* Loading animations for summary section */
+.summary-loading {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 15px 0;
+    position: relative;
+    z-index: 5;
+}
+
+/* Hide entire summary content when loading is active */
+.summary-loading ~ .summary-section,
+.summary-loading ~ * {
+    display: none !important;
+}
+
+.loading-spinner-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+}
+
+.loading-spinner-container p {
+    margin-top: 10px;
+    font-size: 14px;
+    color: var(--pdf-primary);
+    font-weight: 500;
+}
+
+.chat-typing-indicator {
+    margin: 15px auto;
+    padding: 15px;
+    display: flex;
+    justify-content: center;
+    width: 70px; /* Reduced size for the summary section */
+    height: 40px;
+    background: rgba(var(--pdf-primary-rgb), 0.1);
+    border-radius: 30px;
+}
+
+/* Adjust styling for summary typing dots */
+.chat-typing-indicator .typing-dot {
+    width: 8px;
+    height: 8px;
+    margin: 0 3px;
+    background: var(--pdf-primary);
+    border-radius: 50%;
+    opacity: 0.7;
+    animation: typingBounce 1.5s infinite ease-in-out;
+}
+
+/* Message heading styles for transformed Markdown headings */
+.message-heading {
+    margin: 15px 0 10px 0;
+    position: relative;
+    font-size: 17px; /* Increased heading size */
+    color: var(--pdf-text);
+    padding-bottom: 5px;
+}
+
+.message-heading strong {
+    font-weight: 600;
+    display: inline-block;
+}
+
+/* All headings have the same size now */
+.main-heading, .sub-heading {
+    font-size: 17px; /* Increased heading size */
+    margin-bottom: 8px;
+}
+
+.message-heading + .message-bullet-list,
+.message-heading + .bullet-item {
+    margin-top: 8px;
+}
+
+.message-heading + .message-heading {
+    margin-top: 20px; /* Add space between consecutive headings */
+}
+
+/* Add more space after bullet points followed by headings for better section separation */
+.bullet-item:last-of-type + .message-heading,
+.message-bullet-list:last-of-type + .message-heading {
+    margin-top: 18px;
+}
+
+/* Style for inline headings inside paragraphs */
+.inline-heading {
+    display: inline-block;
+    margin-right: 5px;
+    font-size: 17px; /* Same size as other headings */
+    color: var(--pdf-text);
+}
+
+.inline-heading strong {
+    font-weight: 600;
+}
+
+/* Message bullet list styles */
+.message-bullet-list {
+    margin: 5px 0 10px 0;
+    padding-left: 20px;
+}
+
+.message-bullet-list li {
+    margin-bottom: 5px;
+}
+
+.bullet-item {
+    position: relative;
+    padding-left: 20px;
+    margin-bottom: 8px;
+    line-height: 1.6;
+    font-size: 16px; /* Increased bullet item text size */
+}
+
+.bullet-item::before {
+    content: "•";
+    position: absolute;
+    left: 5px;
+    color: var(--pdf-primary);
+    font-size: 14px;
+}
+
+.message-content {
+    width: 100%;
+    overflow-x: auto;
+    font-size: 16px; /* Increased base font size */
+    line-height: 1.6;
+    font-family: var(--font-Onest), sans-serif;
+    word-break: break-word;
+    overflow-wrap: break-word;
+    max-width: 100%; /* Ensure content fits within the container */
+}
+
+.message-content p {
+    line-height: 1.6;
+    font-size: 16px; /* Increased paragraph text size */
+}
+
+.message-content pre {
+    background: #f7f7f7;
+    border-radius: 6px;
+    padding: 12px;
+    overflow-x: auto;
+    margin: 15px 0;
+    border: 1px solid #eaeaea;
+    font-size: 15px; /* Slightly increased code block text size */
+    position: relative;
+    max-width: 100%;
+    width: auto;
+}
+
+.message-content code {
+    font-family: 'Fira Code', 'Consolas', 'Monaco', monospace;
+    font-size: 15px; /* Increased code text size */
+    tab-size: 4;
+    background-color: rgba(0, 0, 0, 0.05);
+    padding: 3px 5px;
+    border-radius: 4px;
+    white-space: pre-wrap;
+}
+
+.message-content pre code {
+    background-color: transparent;
+    padding: 0;
+    white-space: pre;
+    border-radius: 0;
+}
+
+/* Regular paragraph styling */
+.regular-paragraph {
+    margin-bottom: 12px;
+    line-height: 1.6;
+    font-size: 16px;
+    font-weight: normal;
+}
+
+.message-content .regular-paragraph {
+    padding-left: 0;
+    margin-bottom: 12px;
+    line-height: 1.6;
+    font-weight: normal;
+}
+
+/* Make sure bullet items have the proper styling */
+.bullet-item {
+    position: relative;
+    padding-left: 20px;
+    margin-bottom: 8px;
+    line-height: 1.6;
+    font-size: 16px;
+    font-weight: normal;
+}
+
+.bullet-item::before {
+    content: "•";
+    position: absolute;
+    left: 5px;
+    color: var(--pdf-primary);
+    font-size: 14px;
+    font-weight: normal;
+}
+
+/* Message bullet lists */
+.message-bullet-list {
+    list-style-type: disc;
+    padding-left: 20px;
+    margin: 8px 0 16px 0;
+}
+
+.message-bullet-list li {
+    margin-bottom: 8px;
+    line-height: 1.6;
+}
+
+/* Message numbered lists */
+.message-numbered-list {
+    list-style-type: decimal;
+    padding-left: 24px;
+    margin: 8px 0 16px 0;
+}
+
+.message-numbered-list li {
+    margin-bottom: 8px;
+    line-height: 1.6;
+}
+
+/* Message headings */
+.message-heading {
+    font-weight: 600;
+    margin: 16px 0 8px 0;
+    line-height: 1.4;
+    color: var(--pdf-text);
+}
+
+h1.message-heading, 
+.message-content h1 {
+    font-size: 20px;
+    border-bottom: 1px solid var(--pdf-border);
+    padding-bottom: 4px;
+}
+
+h2.message-heading,
+.message-content h2 {
+    font-size: 18px;
+}
+
+h3.message-heading,
+.message-content h3 {
+    font-size: 16px;
+}
+
+/* Bold and italic text */
+.message-content strong {
+    font-weight: 600;
+}
+
+.message-content em {
+    font-style: italic;
+}
+
+/* Dark mode adjustments */
+[data-theme="dark"] .message-content pre {
+    background-color: rgba(255, 255, 255, 0.05);
+    border-color: #444;
+}
+
+[data-theme="dark"] .message-content code {
+    background-color: rgba(255, 255, 255, 0.1);
+    color: #e0e0e0;
+}
+
+/* Adjust message container based on screen size */
+@media (max-width: 768px) {
+    .message {
+        max-width: 90%;
+    }
+    
+    .ai-message {
+        width: 85%;
+    }
+}
+
+@media (max-width: 480px) {
+    .message {
+        max-width: 95%;
+    }
+    
+    .ai-message {
+        width: 90%;
+    }
+}
