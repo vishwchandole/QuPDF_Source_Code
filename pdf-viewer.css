@@ -3169,3 +3169,38 @@ h3.message-heading,
         width: 90%;
     }
 }
+
+/* Copy button styling */
+.copy-button {
+    position: absolute;
+    bottom: 8px;
+    right: 8px;
+    background: var(--pdf-bg);
+    border: 1px solid var(--pdf-border);
+    border-radius: 4px;
+    padding: 4px 8px;
+    font-size: 12px;
+    color: var(--pdf-text);
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.message:hover .copy-button {
+    opacity: 1;
+}
+
+.copy-button:hover {
+    background: var(--pdf-primary);
+    color: white;
+    border-color: var(--pdf-primary);
+}
+
+.copy-button.copied {
+    background: var(--pdf-success);
+    color: white;
+    border-color: var(--pdf-success);
+}
