@@ -11,8 +11,6 @@ let ctx = canvas.getContext('2d');
 let currentPDF = null;
 let pdfData = null;
 let textLayerDiv = null;
-let highlights = [];
-let isHighlightMode = false;
 let selectedText = '';
 let chatHistory = [];
 let allPagesRendered = false;
@@ -31,7 +29,6 @@ const resetZoomButton = document.getElementById('reset-zoom');
 const zoomLevelSpan = document.getElementById('zoom-level');
 const searchInput = document.getElementById('search-input');
 const searchButton = document.getElementById('search-btn');
-const highlightButton = document.getElementById('highlight-btn');
 const downloadButton = document.getElementById('download-btn');
 const backButton = document.getElementById('back-to-home');
 const pdfTitle = document.getElementById('pdf-title');
@@ -129,9 +126,6 @@ function setupEventListeners() {
             document.querySelector('.pdf-search').style.maxWidth = `${newWidth}px`;
         }
     });
-    
-    // Highlight functionality
-    highlightButton.addEventListener('click', toggleHighlightMode);
     
     // Download PDF
     downloadButton.addEventListener('click', downloadPdf);
