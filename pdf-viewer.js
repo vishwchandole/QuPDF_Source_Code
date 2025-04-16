@@ -11,7 +11,6 @@ let ctx = canvas.getContext('2d');
 let currentPDF = null;
 let pdfData = null;
 let textLayerDiv = null;
-let selectedText = '';
 let chatHistory = [];
 let allPagesRendered = false;
 let canvasElements = []; // Array to store all canvas elements
@@ -203,9 +202,6 @@ function setupEventListeners() {
     document.querySelectorAll('button').forEach(button => {
         addButtonPressEffect(button);
     });
-    
-    // Add text selection event listener
-    document.addEventListener('mouseup', handleHighlight);
     
     // Set up toggle PDF button for responsive views
     setupTogglePdfButton();
@@ -1021,19 +1017,6 @@ function searchInPage(pageIndex, searchTerm) {
     });
 }
 
-// Highlight search terms in text layer
-function highlightSearchTermInTextLayer(textLayer, searchTerm) {
-    const textDivs = textLayer.querySelectorAll('span');
-    const regex = new RegExp(searchTerm, 'gi');
-    
-    textDivs.forEach(div => {
-        const text = div.textContent;
-        if (regex.test(text)) {
-            div.classList.add('search-highlight');
-        }
-    });
-}
-
 // Clear search highlights
 function clearSearchHighlights() {
     // Remove all search highlights
@@ -1102,112 +1085,6 @@ function onNextPage() {
     }
 }
 
-// Handle text highlighting
-function handleHighlight(event) {
-    if (!isHighlightMode) return;
-    
-    const selection = window.getSelection();
-    const selectedText = selection.toString().trim();
-    
-    if (!selectedText) return;
-    
-    try {
-        const range = selection.getRangeAt(0);
-        const pageElement = event.target.closest('.pdf-page-container');
-        
-        if (!pageElement) return;
-        
-        const pageNumber = parseInt(pageElement.getAttribute('data-page-number'));
-        
-        // Create highlight element
-        const highlight = document.createElement('span');
-        highlight.className = 'highlight';
-        highlight.textContent = selectedText;
-        
-        // Get the text layer
-        const textLayer = pageElement.querySelector('.textLayer');
-        if (!textLayer) return;
-        
-        // Wrap the selected text in the highlight span
-        range.surroundContents(highlight);
-        
-        // Store highlight data
-        highlights.push({
-            text: selectedText,
-            pageNumber: pageNumber,
-            element: highlight,
-            position: {
-                top: highlight.offsetTop,
-                left: highlight.offsetLeft,
-                width: highlight.offsetWidth,
-                height: highlight.offsetHeight
-            }
-        });
-        
-        // Clear the selection
-        selection.removeAllRanges();
-        
-        // Show success notification
-        const truncatedText = selectedText.length > 30 ? selectedText.substring(0, 30) + '...' : selectedText;
-        showNotification(`Text highlighted: "${truncatedText}"`, 'success');
-    } catch (error) {
-        console.error('Error highlighting text:', error);
-        showNotification('Error highlighting text. Please try again.', 'error');
-    }
-}
-
-// Toggle highlight mode
-function toggleHighlightMode() {
-    isHighlightMode = !isHighlightMode;
-    const highlightBtn = document.getElementById('highlight-btn');
-    const pdfContainer = document.querySelector('.pdf-container');
-    
-    if (isHighlightMode) {
-        // Enable highlight mode
-        highlightBtn.classList.add('highlight-active');
-        pdfContainer.classList.add('highlight-mode');
-        document.body.style.cursor = 'text';
-        showNotification('Highlight mode enabled. Select text to highlight.', 'info');
-        
-        // Make text layer more visible in highlight mode
-        document.querySelectorAll('.textLayer').forEach(layer => {
-            layer.style.opacity = '0.2';
-        });
-    } else {
-        // Disable highlight mode
-        highlightBtn.classList.remove('highlight-active');
-        pdfContainer.classList.remove('highlight-mode');
-        document.body.style.cursor = 'default';
-        showNotification('Highlight mode disabled', 'info');
-        
-        // Reset text layer opacity
-        document.querySelectorAll('.textLayer').forEach(layer => {
-            layer.style.opacity = '0.2';
-        });
-    }
-}
-
-// Clear highlights
-function clearHighlights() {
-    if (highlights.length === 0) {
-        showNotification('No highlights to clear', 'info');
-        return;
-    }
-    
-    // Remove all highlight elements
-    highlights.forEach(highlight => {
-        if (highlight.element && highlight.element.parentNode) {
-            const text = highlight.element.textContent;
-            const textNode = document.createTextNode(text);
-            highlight.element.parentNode.replaceChild(textNode, highlight.element);
-        }
-    });
-    
-    // Clear highlights array
-    highlights = [];
-    showNotification('All highlights have been cleared', 'success');
-}
-
 // Download PDF with highlights
 async function downloadPdf() {
     if (!pdfData) {
@@ -1239,118 +1116,32 @@ async function downloadPdf() {
             throw new Error('Invalid PDF data');
         }
 
-        // If there are no highlights, download the original PDF directly
-        if (!highlights || highlights.length === 0) {
-            // Create blob and download
-            const blob = new Blob([pdfBytes], { type: 'application/pdf' });
-            const url = URL.createObjectURL(blob);
-            
-            // Get filename from title or use default
-            const fileName = (pdfTitle?.textContent || 'document')
-                .replace(/[^a-z0-9]/gi, '_') // Replace special chars with underscore
-                .toLowerCase() + '.pdf';
-            
-            // Create and trigger download
-            const a = document.createElement('a');
-            a.style.display = 'none';
-            a.href = url;
-            a.download = fileName;
-            document.body.appendChild(a);
-            
-            // Trigger download
-            a.click();
-            
-            // Clean up
-            setTimeout(() => {
-                document.body.removeChild(a);
-                URL.revokeObjectURL(url);
-                downloadButton.classList.remove('downloading');
-                showNotification(`PDF "${fileName}" downloaded successfully!`, 'success');
-            }, 100);
-            return;
-        }
+        // Create blob and download
+        const blob = new Blob([pdfBytes], { type: 'application/pdf' });
+        const url = URL.createObjectURL(blob);
         
-        // If there are highlights, use pdf-lib to add them
-        try {
-            // Create a new PDF document
-            const PDFLib = await import('https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js');
-            const modifiedPdfDoc = await PDFLib.PDFDocument.load(pdfBytes);
-            
-            // Apply highlights to each page if they exist
-            const pages = modifiedPdfDoc.getPages();
-            for (const highlight of highlights) {
-                if (!highlight.pageNumber || !highlight.position) continue;
-                
-                const pageIndex = highlight.pageNumber - 1;
-                if (pageIndex < 0 || pageIndex >= pages.length) continue;
-                
-                const page = pages[pageIndex];
-                
-                // Create highlight annotation
-                page.drawRectangle({
-                    x: highlight.position.left,
-                    y: page.getHeight() - (highlight.position.top + highlight.position.height),
-                    width: highlight.position.width,
-                    height: highlight.position.height,
-                    color: PDFLib.rgb(1, 0.898, 0.212), // #ffe536 in RGB
-                    opacity: 0.4
-                });
-            }
-            
-            // Save the modified PDF
-            const modifiedPdfBytes = await modifiedPdfDoc.save();
-            
-            // Create blob and download
-            const blob = new Blob([modifiedPdfBytes], { type: 'application/pdf' });
-            const url = URL.createObjectURL(blob);
-            
-            // Get filename from title or use default
-            const fileName = (pdfTitle?.textContent || 'document')
-                .replace(/[^a-z0-9]/gi, '_') // Replace special chars with underscore
-                .toLowerCase() + '_with_highlights.pdf';
-            
-            // Create and trigger download
-            const a = document.createElement('a');
-            a.style.display = 'none';
-            a.href = url;
-            a.download = fileName;
-            document.body.appendChild(a);
-            
-            // Trigger download
-            a.click();
-            
-            // Clean up
-            setTimeout(() => {
-                document.body.removeChild(a);
-                URL.revokeObjectURL(url);
-                downloadButton.classList.remove('downloading');
-                showNotification(`PDF "${fileName}" downloaded successfully!`, 'success');
-            }, 100);
-            
-        } catch (error) {
-            console.error('Error modifying PDF with highlights:', error);
-            // If pdf-lib fails, fall back to downloading original PDF
-            const blob = new Blob([pdfBytes], { type: 'application/pdf' });
-            const url = URL.createObjectURL(blob);
-            
-            const fileName = (pdfTitle?.textContent || 'document')
-                .replace(/[^a-z0-9]/gi, '_')
-                .toLowerCase() + '.pdf';
-            
-            const a = document.createElement('a');
-            a.style.display = 'none';
-            a.href = url;
-            a.download = fileName;
-            document.body.appendChild(a);
-            a.click();
-            
-            setTimeout(() => {
-                document.body.removeChild(a);
-                URL.revokeObjectURL(url);
-                downloadButton.classList.remove('downloading');
-                showNotification(`Original PDF "${fileName}" downloaded successfully!`, 'success');
-            }, 100);
-        }
+        // Get filename from title or use default
+        const fileName = (pdfTitle?.textContent || 'document')
+            .replace(/[^a-z0-9]/gi, '_') // Replace special chars with underscore
+            .toLowerCase() + '.pdf';
+        
+        // Create and trigger download
+        const a = document.createElement('a');
+        a.style.display = 'none';
+        a.href = url;
+        a.download = fileName;
+        document.body.appendChild(a);
+        
+        // Trigger download
+        a.click();
+        
+        // Clean up
+        setTimeout(() => {
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            downloadButton.classList.remove('downloading');
+            showNotification(`PDF "${fileName}" downloaded successfully!`, 'success');
+        }, 100);
         
     } catch (error) {
         console.error('Error downloading PDF:', error);
@@ -1762,7 +1553,9 @@ function displayMessage(message, sender, container) {
             // Enhanced formatting for AI messages
             let formattedMessage = message;
             
-            // Basic markdown formatting
+            // First, clean up any multiple consecutive newlines
+            formattedMessage = formattedMessage.replace(/\n{3,}/g, '\n');
+            
             // Convert headers (##, ###, etc.)
             formattedMessage = formattedMessage.replace(/^### (.*?)$/gm, '<h3 class="message-heading">$1</h3>');
             formattedMessage = formattedMessage.replace(/^## (.*?)$/gm, '<h2 class="message-heading">$1</h2>');
@@ -1795,8 +1588,28 @@ function displayMessage(message, sender, container) {
             // Wrap plain text paragraphs (text not already wrapped in HTML tags)
             formattedMessage = formattedMessage.replace(/^(?!<[a-z][a-z0-9]*>)(.+?)(?!<\/[a-z][a-z0-9]*>)$/gm, '<p class="regular-paragraph">$1</p>');
             
-            // Convert newlines to <br> for any remaining text
+            // Convert newlines to <br> for any remaining text, but avoid double <br> tags
             formattedMessage = formattedMessage.replace(/\n/g, '<br>');
+            formattedMessage = formattedMessage.replace(/<br><br>/g, '<br>');
+            
+            // Clean up any remaining double line breaks
+            formattedMessage = formattedMessage.replace(/(<br>){2,}/g, '<br>');
+            
+            // Remove any <br> tags that are immediately before or after headings
+            formattedMessage = formattedMessage.replace(/<br>(<h[1-6][^>]*>)/g, '$1');
+            formattedMessage = formattedMessage.replace(/(<\/h[1-6]>)<br>/g, '$1');
+            
+            // Remove any <br> tags that are immediately before or after lists
+            formattedMessage = formattedMessage.replace(/<br>(<[uo]l[^>]*>)/g, '$1');
+            formattedMessage = formattedMessage.replace(/(<\/[uo]l>)<br>/g, '$1');
+            
+            // Remove any <br> tags that are immediately before or after code blocks
+            formattedMessage = formattedMessage.replace(/<br>(<pre[^>]*>)/g, '$1');
+            formattedMessage = formattedMessage.replace(/(<\/pre>)<br>/g, '$1');
+            
+            // Remove any <br> tags that are immediately before or after paragraphs
+            formattedMessage = formattedMessage.replace(/<br>(<p[^>]*>)/g, '$1');
+            formattedMessage = formattedMessage.replace(/(<\/p>)<br>/g, '$1');
             
             // Set the formatted content
             container.innerHTML = formattedMessage;
@@ -2167,14 +1980,14 @@ function addCustomStyles() {
     const style = document.createElement('style');
     style.textContent = `
         .clean-heading {
-            margin-top: 18px;
-            margin-bottom: 0;
-            padding: 5px 0;
+            margin-top: 8px;
+            margin-bottom: 4px;
+            padding: 0;
             font-size: 18px;
             font-weight: bold;
             color: #333;
             font-family: sans-serif;
-            display: inline;
+            display: block;
         }
         .clean-heading strong {
             font-weight: bold;
@@ -2185,16 +1998,16 @@ function addCustomStyles() {
         }
         .post-heading-content {
             display: block;
-            margin-top: 5px;
-            margin-bottom: 20px;
+            margin-top: 4px;
+            margin-bottom: 8px;
         }
         .inline-heading {
-            display: inline;
-            margin-top: 25px;
-            margin-bottom: 15px;
+            display: block;
+            margin-top: 8px;
+            margin-bottom: 4px;
         }
         .inline-heading + .post-heading-content {
-            margin-bottom: 25px;
+            margin-bottom: 8px;
         }
         .inline-heading strong {
             color: #776cff;
@@ -2203,35 +2016,48 @@ function addCustomStyles() {
         }
         /* Add additional styles for better response formatting */
         .message-content p {
-            // margin-bottom: 20px;
+            margin-bottom: 4px;
             line-height: 1.5;
         }
         .message-content p + p {
-            margin-top: 15px;
+            margin-top: 4px;
         }
         .message-content div + p {
-            margin-top: 15px;
+            margin-top: 4px;
         }
         .message-content ul, .message-content ol {
-            // margin-bottom: 25px;
+            margin-bottom: 8px;
             padding-left: 25px;
-            margin-top: 10px;
+            margin-top: 4px;
         }
         .message-content li {
-            margin-bottom: 8px;
+            margin-bottom: 2px;
             padding-left: 5px;
         }
         .message-content li:last-child {
-            margin-bottom: 15px;
+            margin-bottom: 4px;
         }
         .message-content strong {
             font-weight: bold;
             color: #333;
         }
         .message-content br {
-            display: block;
-            margin-top: 5px;
+            display: none;
+            margin: 0;
             content: "";
+        }
+        .message-heading {
+            margin-top: 8px;
+            margin-bottom: 4px;
+            font-weight: bold;
+            color: #333;
+        }
+        .message-content pre {
+            margin: 4px 0;
+        }
+        .message-content code {
+            margin: 0;
+            padding: 0;
         }
     `;
     document.head.appendChild(style);
