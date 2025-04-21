@@ -3,8 +3,8 @@
 const BACKEND_URL = 'http://localhost:5000';
 const MOCK_MODE = false; // Set to false to use Gemini API
 // Set the Gemini API keys
-let GEMINI_API_KEY = 'AIzaSyCZdSouccMkv6RxBXR9NGZLJ65VJ1GuyFM';
-let ALTERNATE_GEMINI_API_KEY = 'AIzaSyBPR11n7NPvgFT8IfAc7D-_kptyWSzq1Io';
+let GEMINI_API_KEY = 'YOUR API KEY HERE';
+let ALTERNATE_GEMINI_API_KEY = 'YOUR API KEY HERE';
 let useAlternateKey = false;
 
 // Function to get the current API key
